@@ -181,8 +181,9 @@ class SemisupModel(object):
         tf.log(1e-8 + p_aba),
         weights=walker_weight,
         scope='loss_aba')
-    self.add_visit_loss(p_ab, visit_weight)
-
+    #self.add_visit_loss(p_ab, visit_weight)
+    self.add_cluster_loss(a,b,labels)
+    self.loss_aba = loss_aba
     tf.summary.scalar('Loss_aba', loss_aba)
 
   def add_visit_loss(self, p, weight=1.0):
@@ -203,6 +204,54 @@ class SemisupModel(object):
         scope='loss_visit')
 
     tf.summary.scalar('Loss_Visit', visit_loss)
+
+  def add_cluster_loss(self, a,b,labels, weight=0.5):
+    """Add the "clustering" loss to the model.
+
+    Args:
+      p: [N, M] tensor. Each row must be a valid probability distribution
+          (i.e. sum to 1.0)
+      weight: Loss weight.
+    """
+
+    # any unsupervised sample should be close to other samples.
+    # i.e. we do a visit loss but with all samples in a
+    all = tf.concat([a,b], 0, name="all")
+    match_all = tf.matmul(all, all, transpose_b=True, name="match_all")
+    match_b = tf.matmul(b,b, transpose_b=True, name="match_all")
+
+    # a) similar to visit loss
+    # 13.3% after 7000
+    # p_ab = tf.nn.softmax(match_all, name='p_ab')
+    # p_ba = tf.nn.softmax(tf.transpose(match_all), name='p_ba')
+    # p_aba = tf.matmul(p_ab, p_ba, name='p_aba')
+    #
+    # visit_probability = tf.reduce_mean(
+    #     p_aba, [0], keep_dims=True, name='visit_prob')
+    # t_nb = tf.shape(p_aba)[1]
+    # cluster_loss = tf.losses.softmax_cross_entropy(
+    #   tf.fill([1, t_nb], 1.0 / tf.cast(t_nb, tf.float32)),
+    #   tf.log(1e-8 + visit_probability),
+    #   weights=weight,
+    #   scope='loss_visit')
+
+    # b) visit loss but with unsupervised samples
+
+    match_b = tf.subtract(match_b, tf.diag(tf.diag_part(match_b)), "cleardiag")
+    p = tf.nn.softmax(match_b, name='p_bb')
+
+    visit_probability = tf.reduce_mean(
+      p, [0], keep_dims=True, name='visit_prob')
+    t_nb = tf.shape(p)[1]
+    cluster_loss = tf.losses.softmax_cross_entropy(
+      tf.fill([1, t_nb], 1.0 / tf.cast(t_nb, tf.float32)),
+      tf.log(1e-8 + visit_probability),
+      weights=weight,
+      scope='loss_visit')
+
+    self.cluster_loss = cluster_loss
+
+    tf.summary.scalar('Loss_Cluster', cluster_loss)
 
   def add_logit_loss(self, logits, labels, weight=1.0, smoothing=0.0):
     """Add supervised classification loss to the model."""

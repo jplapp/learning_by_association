@@ -42,7 +42,7 @@ flags.DEFINE_integer('sup_seed', -1,
 flags.DEFINE_integer('sup_per_batch', 10,
                      'Number of labeled samples per class per batch.')
 
-flags.DEFINE_integer('unsup_batch_size', 100,
+flags.DEFINE_integer('unsup_batch_size', 200,
                      'Number of unlabeled samples per batch.')
 
 flags.DEFINE_integer('eval_interval', 500,
@@ -57,7 +57,7 @@ flags.DEFINE_float('decay_steps', 5000,
 
 flags.DEFINE_float('visit_weight', 1.0, 'Weight for visit loss.')
 
-flags.DEFINE_integer('max_steps', 20000, 'Number of training steps.')
+flags.DEFINE_integer('max_steps', 10000, 'Number of training steps.')
 
 flags.DEFINE_string('logdir', '/tmp/semisup_mnist', 'Training log path.')
 
@@ -75,6 +75,9 @@ def main(_):
   seed = FLAGS.sup_seed if FLAGS.sup_seed != -1 else None
   sup_by_label = semisup.sample_by_label(train_images, train_labels,
                                          FLAGS.sup_per_class, NUM_LABELS, seed)
+
+  # remove all 9s
+  sup_by_label.pop(9)
 
   graph = tf.Graph()
   with graph.as_default():
@@ -118,6 +121,8 @@ def main(_):
 
     for step in range(FLAGS.max_steps):
       _, summaries, loss, loss_aba = sess.run([train_op, summary_op, model.cluster_loss, model.loss_aba])
+      print(loss, loss_aba)
+      #tf.train.prprint(model.cluster_loss)
       if (step + 1) % FLAGS.eval_interval == 0 or step == 99:
         print('Step: %d' % step)
         test_pred = model.classify(test_images).argmax(-1)
