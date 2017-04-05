@@ -74,7 +74,7 @@ def sample_by_label(images, labels, n_per_label, num_labels, seed=None):
   """Extract equal number of sampels per class."""
   res = []
   rng = np.random.RandomState(seed=seed)
-  for i in xrange(num_labels):
+  for i in range(num_labels):
     a = images[labels == i]
     if n_per_label == -1:  # use all available labeled data
       res.append(a)
@@ -97,7 +97,7 @@ def create_virt_emb(n, size):
 def confusion_matrix(labels, predictions, num_labels):
   """Compute the confusion matrix."""
   rows = []
-  for i in xrange(num_labels):
+  for i in range(num_labels):
     row = np.bincount(predictions[labels == i], minlength=num_labels)
     rows.append(row)
   return np.vstack(rows)
@@ -265,7 +265,7 @@ class SemisupModel(object):
     """Evaluate 'endpoint' tensor for all 'images' using batches."""
     batch_size = self.test_batch_size
     emb = []
-    for i in xrange(0, len(images), batch_size):
+    for i in range(0, len(images), batch_size):
       emb.append(endpoint.eval({self.test_in: images[i:i + batch_size]}))
     return np.concatenate(emb)
 

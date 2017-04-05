@@ -79,7 +79,7 @@ def get_data(name, batch_size=1000):
 
         try:
             runs = len(filenames) / batch_size
-            for i in xrange(runs):
+            for i in range(runs):
                 print('run %d of %d' % (i + 1, runs))
                 imgs, lbls = sess.run([image_batch, label_batch])
 

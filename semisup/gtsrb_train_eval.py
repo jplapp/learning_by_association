@@ -93,7 +93,7 @@ def main(_):
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-    for step in xrange(FLAGS.max_steps):
+    for step in range(FLAGS.max_steps):
       _, summaries = sess.run([train_op, summary_op])
       if (step + 1) % FLAGS.eval_interval == 0 or step == 99:
         print('Step: %d' % step)
