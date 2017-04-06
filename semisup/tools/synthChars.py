@@ -24,24 +24,30 @@ They are used in synthChars_train_eval.py.
 from __future__ import division
 from __future__ import print_function
 
-import numpy as np
 from tools import data_dirs
+from os import listdir, path
+from PIL import Image as PImage
+from tools.group import *
 
 DATADIR = data_dirs.synthChars
 
-
-NUM_LABELS = 62 # 62 + 3 TODO implement tree
+NUM_LABELS = 62
 IMAGE_SHAPE = [28, 28, 1]  #originally 128x128, downsampled
 
-#!/usr/bin/python
-from os import listdir, path
-from PIL import Image as PImage
+# TREE_DEF
+digits = TreeNode("digits", leafs=range(10))
+uppercase = TreeNode("uppercase", leafs=range(10, 36))
+lowercase = TreeNode("lowercase", leafs=range(36, 62))
+root = TreeNode("root", children=[digits, uppercase, lowercase])
+
+#root = TreeNode("all", leafs=range(62))
+
+tree = TreeStructure(root)
 
 def loadImages(label, num_samples):
     # return array of num_samples images
 
     imagesList = listdir(label)
-    np.random.seed(47)  # TODO make configurable
     indices = np.random.choice(len(imagesList), min(len(imagesList), num_samples), False)
     imagesList = [ imagesList[i] for i in indices]
 
@@ -55,8 +61,7 @@ def loadImages(label, num_samples):
 
     return loadedImages
 
-
-def get_data(name, num_per_class=10):
+def get_data(name, num_per_class=10, seed=47):
   """Get a split from the synth dataset.
 
   Args:
@@ -71,21 +76,31 @@ def get_data(name, num_per_class=10):
 
   imList = []
   labelList = []
+  dataLabelList = []
 
   labelIndex = 0
+
+  np.random.seed(seed)
 
   for label in labelsList:
     imgs = loadImages(path.join(DATADIR, label), num_per_class)
     imList = imList + imgs
-    labelList = labelList + ([labelIndex] * len(imgs))
+
+    treeNode = tree.lookupMap[labelIndex]
+    combinedLabels = [treeNode.labels + treeNode.walkerLabels + treeNode.activeGroups]
+
+    labelList = labelList + (combinedLabels * len(imgs))
+    dataLabelList = dataLabelList + ([labelIndex] * len(imgs))
     labelIndex = labelIndex + 1
 
   labels = np.asarray(labelList)
+  dataLabels = np.asarray(dataLabelList)
   allImgs = np.asarray(imList)
-  allImgs = allImgs.reshape([allImgs.shape[0], allImgs.shape[1], allImgs.shape[2], 1])
+  allImgs = allImgs.reshape([allImgs.shape[0],allImgs.shape[1],allImgs.shape[2],1])
 
-  print(allImgs.shape, labels.shape)
-  return [allImgs, labels]
+  print("loaded syntch chars dataset", allImgs.shape, labels.shape)
+  return [allImgs, labels, dataLabels, tree]
 
 
-get_data('train', 10)
+#res = get_data('train', 10)
+#print(res)
