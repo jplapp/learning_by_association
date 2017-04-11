@@ -107,7 +107,8 @@ def confusion_matrix(labels, predictions, num_labels):
 class SemisupModel(object):
   """Helper class for setting up semi-supervised training."""
 
-  def __init__(self, model_func, num_labels, input_shape, test_in=None, treeStructure=None):
+  def __init__(self, model_func, num_labels, input_shape, test_in=None,
+               treeStructure=None, maxDepth=99):
     """Initialize SemisupModel class.
 
     Creates an evaluation graph for the provided model_func.
@@ -128,8 +129,12 @@ class SemisupModel(object):
 
     self.test_batch_size = 100
     self.treeStructure = treeStructure
+    self.maxDepth = maxDepth
 
     self.model_func = model_func
+
+    self.walker_losses = []
+    self.visit_losses = []
 
     if test_in is not None:
       self.test_in = test_in
@@ -168,7 +173,7 @@ class SemisupModel(object):
     num_samples = int(labels.get_shape()[0])
     node_usages_offset = int(labels.get_shape()[1] - self.treeStructure.num_nodes - self.treeStructure.depth)
 
-    for d in range(self.treeStructure.depth):
+    for d in range(min(self.maxDepth, self.treeStructure.depth)):
       labels_d = tf.slice(labels, [0, node_usages_offset + d],[num_samples, 1])
       labels_d = tf.reshape(labels_d, [-1]) # necessary for next reshape
 
@@ -187,16 +192,18 @@ class SemisupModel(object):
       loss_aba = tf.losses.softmax_cross_entropy(
         p_target,
         tf.log(1e-8 + p_aba),
-        weights=walker_weight*np.exp(-d/2),
+        weights=walker_weight,#*np.exp(-d/2),
         scope='loss_aba'+str(d))
-      self.add_visit_loss(p_ab, visit_weight * np.exp(-d/4)) # todo visit loss should decay, but how much?
+      self.add_visit_loss(p_ab, visit_weight)# * np.exp(-d/4)) # todo visit loss should decay, but how much?
 
       tf.summary.scalar('Loss_aba'+str(d), loss_aba)
+
+      self.walker_losses = self.walker_losses + [loss_aba]
 
   def add_semisup_loss(self, a, b, labels, walker_weight=1.0, visit_weight=1.0):
     """Add semi-supervised classification loss to the model.
 
-    The loss constist of two terms: "walker" and "visit".
+    The loss consists of two terms: "walker" and "visit".
 
     Args:
       a: [N, emb_size] tensor with supervised embedding vectors.
@@ -218,14 +225,14 @@ class SemisupModel(object):
 
     self.create_walk_statistics(p_aba, equality_matrix)
 
-    loss_aba = tf.losses.softmax_cross_entropy(
+    self.loss_aba = tf.losses.softmax_cross_entropy(
       p_target,
       tf.log(1e-8 + p_aba),
       weights=walker_weight,
       scope='loss_aba')
     self.add_visit_loss(p_ab, visit_weight)
 
-    tf.summary.scalar('Loss_aba', loss_aba)
+    tf.summary.scalar('Loss_aba', self.loss_aba)
 
   def add_visit_loss(self, p, weight=1.0):
     """Add the "visit" loss to the model.
@@ -238,6 +245,7 @@ class SemisupModel(object):
     visit_probability = tf.reduce_mean(
         p, [0], keep_dims=True, name='visit_prob')
     t_nb = tf.shape(p)[1]
+
     visit_loss = tf.losses.softmax_cross_entropy(
         tf.fill([1, t_nb], 1.0 / tf.cast(t_nb, tf.float32)),
         tf.log(1e-8 + visit_probability),
@@ -245,6 +253,7 @@ class SemisupModel(object):
         scope='loss_visit')
 
     tf.summary.scalar('Loss_Visit', visit_loss)
+    self.visit_losses = self.visit_losses + [visit_loss]
 
   def add_logit_loss(self, logits, labels, weight=1.0):
     """Add supervised classification loss to the model."""
@@ -262,8 +271,6 @@ class SemisupModel(object):
     """Add supervised classification loss to the model.
        For a hierarchical tree"""
 
-    # TODO weight is ignored
-
     # labels are separated by nodes
     # calculate a softmax for every node
     # use node indices to weight the softmax (if a node is not relevant for a sample)
@@ -272,23 +279,33 @@ class SemisupModel(object):
     # this is induced by the tree
     num_samples = int(logits.get_shape()[0])
     node_usages_offset = int(labels.get_shape()[1]-self.treeStructure.num_nodes)
+    nodes = self.treeStructure.nodes
+    node_index = 0
 
-    for node_index in range(self.treeStructure.num_nodes):
+    for node in nodes:
+      print(node.depth)
+      if node.depth >= self.maxDepth: continue
+
       logits_subset = tf.slice(logits, [0, self.treeStructure.offsets[node_index]],
                                [num_samples, self.treeStructure.node_sizes[node_index]])
       labels_subset = tf.slice(labels, [0, node_index], [num_samples, 1]) # labels are not one-hot encoded
 
       # define the weights for the node here
       # if a node is not relevant for classification of a sample, it is ignored
+      #layer_weight = 0.1 if node_index == 0 else .4
+      layer_weight = tf.constant(1.0)
       weights = tf.slice(labels, [0, node_usages_offset+node_index], [num_samples, 1])
+      weights = tf.multiply(tf.cast(weights, tf.float32), tf.multiply(weight, layer_weight))
 
-      logit_loss = tf.losses.sparse_softmax_cross_entropy(
+      self.logit_loss = tf.losses.sparse_softmax_cross_entropy(
         labels_subset,
         logits_subset,
         scope='loss_logit_node_' + str(node_index),
         weights=weights)
 
-      tf.summary.scalar('Loss_Logit_'+str(node_index), logit_loss)
+      tf.summary.scalar('Loss_Logit_'+str(node_index), self.logit_loss)
+
+      node_index = node_index + 1
 
   def create_walk_statistics(self, p_aba, equality_matrix):
     """Adds "walker" loss statistics to the graph.

@@ -27,20 +27,21 @@ from __future__ import print_function
 from tools import data_dirs
 from os import listdir, path
 from PIL import Image as PImage
-from tools.group import *
+from tools.tree import *
 
 DATADIR = data_dirs.synthChars
 
-NUM_LABELS = 62
 IMAGE_SHAPE = [28, 28, 1]  #originally 128x128, downsampled
 
-# TREE_DEF
 digits = TreeNode("digits", leafs=range(10))
 uppercase = TreeNode("uppercase", leafs=range(10, 36))
 lowercase = TreeNode("lowercase", leafs=range(36, 62))
+
+# standard tree
 root = TreeNode("root", children=[digits, uppercase, lowercase])
 
-#root = TreeNode("all", leafs=range(62))
+# for testing: tree with only leafs
+root = TreeNode("root", leafs=range(62))
 
 tree = TreeStructure(root)
 
@@ -65,7 +66,7 @@ def get_data(name, num_per_class=10, seed=47):
   """Get a split from the synth dataset.
 
   Args:
-   name: 'train' or 'test' TODO is currently ignore, train and test might overlap
+   name: 'train' or 'test' TODO is currently ignored, train and test might overlap
    num: How many samples to read (randomly) from each class of data set
 
   Returns:
@@ -87,10 +88,9 @@ def get_data(name, num_per_class=10, seed=47):
     imList = imList + imgs
 
     treeNode = tree.lookupMap[labelIndex]
-    combinedLabels = [treeNode.labels + treeNode.walkerLabels + treeNode.activeGroups]
 
-    labelList = labelList + (combinedLabels * len(imgs))
-    dataLabelList = dataLabelList + ([labelIndex] * len(imgs))
+    labelList = labelList + ([treeNode.getLabels()] * len(imgs))
+    dataLabelList = dataLabelList + ([label] * len(imgs))
     labelIndex = labelIndex + 1
 
   labels = np.asarray(labelList)
@@ -98,9 +98,5 @@ def get_data(name, num_per_class=10, seed=47):
   allImgs = np.asarray(imList)
   allImgs = allImgs.reshape([allImgs.shape[0],allImgs.shape[1],allImgs.shape[2],1])
 
-  print("loaded syntch chars dataset", allImgs.shape, labels.shape)
+  print("loaded synth chars dataset", allImgs.shape, labels.shape)
   return [allImgs, labels, dataLabels, tree]
-
-
-#res = get_data('train', 10)
-#print(res)

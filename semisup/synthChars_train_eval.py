@@ -17,6 +17,8 @@ limitations under the License.
 Association-based semi-supervised hierarchical training example 
     using Synthetic Characters (Chars74K) dataset.
 
+#100/300, 20/100 per class -> 24 / 17.7 after 2k5
+#100/300 20/100 per class -> 18.2 after 2k5, flat
 """
 
 from __future__ import absolute_import
@@ -26,25 +28,28 @@ from __future__ import print_function
 import tensorflow as tf
 import semisup
 import numpy as np
-#np.set_printoptions(threshold=np.inf)
+# np.set_printoptions(threshold=np.inf)
 
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
-from tools.group import findLabelFromTree
+from tools.tree import findLabelsFromTree, getWalkerLabel
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('sup_per_class', 10,
+flags.DEFINE_integer('sup_per_class', 20,
                      'Number of labeled samples used per class.')
 
 flags.DEFINE_integer('sup_seed', -1,
                      'Integer random seed used for labeled set selection.')
 
-flags.DEFINE_integer('sup_batch_size', 50,
+flags.DEFINE_integer('sup_batch_size', 100,
                      'Number of labeled samples per batch.')
 
 flags.DEFINE_integer('unsup_batch_size', 300,
                      'Number of unlabeled samples per batch.')
+
+flags.DEFINE_integer('train_depth', 1,
+                     'Max depth of tree to train')
 
 flags.DEFINE_integer('eval_interval', 500,
                      'Number of steps between evaluations.')
@@ -64,15 +69,14 @@ flags.DEFINE_string('logdir', '/tmp/semisup_', 'Training log path.')
 
 from tools import synthChars as char_tools
 
-NUM_LABELS = char_tools.NUM_LABELS
 IMAGE_SHAPE = char_tools.IMAGE_SHAPE
 
 
 def main(_):
   # TODO supervised, unsupervised and test images could overlap (if very unlucky)
-  train_images, train_labels, _, tree = char_tools.get_data('train', FLAGS.sup_per_class, seed=1)
-  train_images_unsup, train_images_unsup_labels,_,_ = char_tools.get_data('train', 30, seed=2)
-  test_images, test_labels, test_data_labels, _ = char_tools.get_data('test', 10, seed=3)
+  train_images, train_labels, train_data_labels, tree = char_tools.get_data('train', FLAGS.sup_per_class, seed=1)
+  train_images_unsup, train_images_unsup_labels, _, _ = char_tools.get_data('train', 100, seed=2)
+  test_images, test_labels, test_data_labels, _ = char_tools.get_data('test', 20, seed=3)
 
   # Sample labeled training subset.
   seed = FLAGS.sup_seed if FLAGS.sup_seed != -1 else None
@@ -80,7 +84,7 @@ def main(_):
   graph = tf.Graph()
   with graph.as_default():
     model = semisup.SemisupModel(semisup.architectures.mnist_model, tree.num_labels,
-                                 IMAGE_SHAPE, treeStructure=tree)
+                                 IMAGE_SHAPE, treeStructure=tree, maxDepth=FLAGS.train_depth)
 
     # Set up inputs.
     t_unsup_images, _ = semisup.create_input(train_images_unsup, train_images_unsup_labels,
@@ -94,15 +98,15 @@ def main(_):
 
     # Add losses.
     model.add_tree_semisup_loss(
-        t_sup_emb, t_unsup_emb, t_sup_labels, visit_weight=FLAGS.visit_weight)
-    model.add_tree_logit_loss(t_sup_logit, t_sup_labels)
+      t_sup_emb, t_unsup_emb, t_sup_labels, visit_weight=FLAGS.visit_weight)
+    model.add_tree_logit_loss(t_sup_logit, t_sup_labels, weight=0.2)
 
     t_learning_rate = tf.train.exponential_decay(
-        FLAGS.learning_rate,
-        model.step,
-        FLAGS.decay_steps,
-        FLAGS.decay_factor,
-        staircase=True)
+      FLAGS.learning_rate,
+      model.step,
+      FLAGS.decay_steps,
+      FLAGS.decay_factor,
+      staircase=True)
     train_op = model.create_train_op(t_learning_rate)
     summary_op = tf.summary.merge_all()
 
@@ -117,33 +121,63 @@ def main(_):
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
     for step in range(FLAGS.max_steps):
-      _, summaries = sess.run([train_op, summary_op])
+      _, summaries, *losses = sess.run([train_op, summary_op] + [model.logit_loss] + model.walker_losses + model.visit_losses)
+      print("losses:", losses)
       if (step + 1) % FLAGS.eval_interval == 0 or step == 99:
         print('Step: %d' % step)
-        pred = model.classify(test_images)
-        test_pred = [0] * pred.shape[0]
 
-        for i in range(pred.shape[0]):
-          test_pred[i] = findLabelFromTree(tree, pred[i,:])
+        nodeLabels = classify(model, train_images, tree)
+        walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
+                                       for label in train_labels])
 
-        test_pred = np.asarray(test_pred)
-        conf_mtx = semisup.confusion_matrix(test_data_labels, test_pred, NUM_LABELS)
-        test_err = (test_data_labels != test_pred).mean() * 100
-        print(conf_mtx)
-        print('Test error: %.2f %%' % test_err)
-        print()
+        for i in range(FLAGS.train_depth):
+          printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+                               tree.level_sizes[i + 1], "train dimension " + str(i))
 
-        test_summary = tf.Summary(
-            value=[tf.Summary.Value(
-                tag='Test Err', simple_value=test_err)])
 
-        summary_writer.add_summary(summaries, step)
-        summary_writer.add_summary(test_summary, step)
+        nodeLabels = classify(model, test_images, tree)
+        walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
+                                       for label in test_labels])
 
-        saver.save(sess, FLAGS.logdir, model.step)
+        for i in range(FLAGS.train_depth):
+          printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+                               tree.level_sizes[i + 1], "test dimension " + str(i))
+
+
+        # test_summary = tf.Summary(
+        #   value=[tf.Summary.Value(
+        #       tag='Test Err', simple_value=test_err)])
+
+        # summary_writer.add_summary(summaries, step)
+        # summary_writer.add_summary(test_summary, step)
+
+        # saver.save(sess, FLAGS.logdir, model.step)
 
     coord.request_stop()
     coord.join(threads)
+
+
+def classify(model, images, tree):
+  pred = model.classify(images)
+
+  res = []
+
+  for i in range(pred.shape[0]):
+    nodes, _ = findLabelsFromTree(tree, pred[i, :])
+
+    res = res + [nodes]
+
+  return np.asarray(res)
+
+
+def printConfusionMatrix(train_labels, test_pred, num_labels, name=""):
+
+  conf_mtx = semisup.confusion_matrix(train_labels, test_pred, num_labels)
+  test_err = (train_labels != test_pred).mean() * 100
+
+  print(conf_mtx)
+  print(name + ' error: %.2f %%' % test_err)
+  print()
 
 
 if __name__ == '__main__':
