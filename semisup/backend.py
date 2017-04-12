@@ -24,6 +24,7 @@ import numpy as np
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+from architectures import trunc_normal
 
 
 def create_input(input_images, input_labels=None, batch_size=100):
@@ -135,6 +136,7 @@ class SemisupModel(object):
 
     self.walker_losses = []
     self.visit_losses = []
+    self.logit_losses = []
 
     if test_in is not None:
       self.test_in = test_in
@@ -155,8 +157,10 @@ class SemisupModel(object):
       return slim.fully_connected(
           embedding,
           self.num_labels,
-          activation_fn=None,
-          weights_regularizer=slim.l2_regularizer(1e-4))
+          biases_initializer=tf.zeros_initializer(),
+          weights_initializer=trunc_normal(1 / 192.0),
+          weights_regularizer=None,
+          activation_fn=None)
 
   def add_tree_semisup_loss(self, a, b, labels, walker_weight=1.0, visit_weight=1.0):
     """Add semi-supervised classification loss to the model.
@@ -171,10 +175,20 @@ class SemisupModel(object):
       visit_weight: Weight coefficient of the "visit" loss.
     """
     num_samples = int(labels.get_shape()[0])
-    node_usages_offset = int(labels.get_shape()[1] - self.treeStructure.num_nodes - self.treeStructure.depth)
+    level_index_offset = self.treeStructure.num_nodes
+    print(level_index_offset)
+
+    match_ab = tf.matmul(a, b, transpose_b=True, name='match_ab')
+    p_ab = tf.nn.softmax(match_ab, name='p_ab')
+    p_ba = tf.nn.softmax(tf.transpose(match_ab), name='p_ba')
+    p_aba = tf.matmul(p_ab, p_ba, name='p_aba')
+
+    # visit loss would be the same for all layers, so it's only added once here
+    # todo does that make sense?
+    self.add_visit_loss(p_ab, visit_weight)
 
     for d in range(min(self.maxDepth, self.treeStructure.depth)):
-      labels_d = tf.slice(labels, [0, node_usages_offset + d],[num_samples, 1])
+      labels_d = tf.slice(labels, [0, level_index_offset + d],[num_samples, 1])
       labels_d = tf.reshape(labels_d, [-1]) # necessary for next reshape
 
       equality_matrix = tf.equal(tf.reshape(labels_d, [-1, 1]), labels_d)
@@ -182,19 +196,13 @@ class SemisupModel(object):
       p_target = (equality_matrix / tf.reduce_sum(
         equality_matrix, [1], keep_dims=True))
 
-      match_ab = tf.matmul(a, b, transpose_b=True, name='match_ab')
-      p_ab = tf.nn.softmax(match_ab, name='p_ab')
-      p_ba = tf.nn.softmax(tf.transpose(match_ab), name='p_ba')
-      p_aba = tf.matmul(p_ab, p_ba, name='p_aba')
-
       self.create_walk_statistics(p_aba, equality_matrix)
 
       loss_aba = tf.losses.softmax_cross_entropy(
         p_target,
         tf.log(1e-8 + p_aba),
-        weights=walker_weight,#*np.exp(-d/2),
+        weights=walker_weight * np.exp(-d/2),
         scope='loss_aba'+str(d))
-      self.add_visit_loss(p_ab, visit_weight)# * np.exp(-d/4)) # todo visit loss should decay, but how much?
 
       tf.summary.scalar('Loss_aba'+str(d), loss_aba)
 
@@ -297,14 +305,14 @@ class SemisupModel(object):
       weights = tf.slice(labels, [0, node_usages_offset+node_index], [num_samples, 1])
       weights = tf.multiply(tf.cast(weights, tf.float32), tf.multiply(weight, layer_weight))
 
-      self.logit_loss = tf.losses.sparse_softmax_cross_entropy(
+      logit_loss = tf.losses.sparse_softmax_cross_entropy(
         labels_subset,
         logits_subset,
         scope='loss_logit_node_' + str(node_index),
         weights=weights)
 
-      tf.summary.scalar('Loss_Logit_'+str(node_index), self.logit_loss)
-
+      tf.summary.scalar('Loss_Logit_'+str(node_index), logit_loss)
+      self.logit_losses = self.logit_losses + [logit_loss]
       node_index = node_index + 1
 
   def create_walk_statistics(self, p_aba, equality_matrix):

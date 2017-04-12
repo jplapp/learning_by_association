@@ -35,6 +35,12 @@ class TreeTestCase(unittest.TestCase):
     self.assertListEqual(middleNode.labels, [1, 0, 0, 0])
     self.assertListEqual(middleNode.walkerLabels, [1, 2])
 
+    middleNode2 = self.tree.tree.children[0].children[0]
+    self.assertEqual(middleNode2.name, "leaf0")
+    self.assertListEqual(middleNode2.activeGroups, [1, 1, 0, 0])
+    self.assertListEqual(middleNode2.labels, [0, 0, 0, 0])
+    self.assertListEqual(middleNode2.walkerLabels, [0, 0])
+
     upperNode = self.tree.tree.children[1]
     self.assertEqual(upperNode.name, "uppercase")
     # first split is for top node, no others yet
