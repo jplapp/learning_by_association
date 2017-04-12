@@ -15,14 +15,17 @@ def launchRun(name, params):
   train_scores = 0
   test_scores = 0
 
-  #sleep(2)
-  #return 3,2,[3,2],[4,5]
-  proc = subprocess.Popen(['python3', "../"+name+'.py'], stdout=subprocess.PIPE)
+  params_list = []
+  for a in params.items():
+    params_list = params_list + ['--'+str(a[0]), str(a[1])]
+
+  proc = subprocess.Popen(['python3', "../"+name+'.py'] + params_list, stdout=subprocess.PIPE)
+  #proc = subprocess.Popen(['echo'] + params_list, stdout=subprocess.PIPE)
   while True:
     line = proc.stdout.readline()
     if line != '' and len(line) > 0:  # todo quits on all empty lines, improve detection
       res = line.rstrip().decode()
-
+      #print(res)
       type, scores = getAccuracy(res)
       if type is 'train':
         train_scores = scores
@@ -83,28 +86,31 @@ current_threads = []
 
 
 
-def make_call(name, item):
+def make_call(name, item, index):
   print('launching '+name, item)
 
   a,b,c,d = launchRun(name, item)
 
-  return [a,b,c,d]
+  return index, [a,b,c,d]
 
 def run(name, params):
   executor = ThreadPoolExecutor(2)
   tasks = create_task_list(params)
 
   futures = []
+  index = 0
   for task in tasks:
-    futures.append(executor.submit(make_call, name, task))
+    futures.append(executor.submit(make_call, name, task, index))
+    index += 1
 
   for x in as_completed(futures):
-    print(x.result())
+    index, result = x.result()
+    task = tasks[index]
+    print(task, result)
+
 
 
 
 
 
 run("cifar100_train_eval", {"a": [2,3,4]}   )
-
-#print(trains, tests, res)
