@@ -50,10 +50,10 @@ flags.DEFINE_integer('unsup_per_class', 500,
 flags.DEFINE_integer('test_per_class', 20,
                      'Number of labeled samples used per class.')
 
-flags.DEFINE_integer('sup_batch_size', 128,
+flags.DEFINE_integer('sup_batch_size', 64,
                      'Number of labeled samples per batch.')
 
-flags.DEFINE_integer('unsup_batch_size', 128,
+flags.DEFINE_integer('unsup_batch_size', 64,
                      'Number of unlabeled samples per batch.')
 
 flags.DEFINE_integer('train_depth', 1,
@@ -62,7 +62,7 @@ flags.DEFINE_integer('train_depth', 1,
 flags.DEFINE_integer('eval_interval', 500,
                      'Number of steps between evaluations.')
 
-flags.DEFINE_float('learning_rate', 5e-3, 'Initial learning rate.')
+flags.DEFINE_float('learning_rate', 1e-3, 'Initial learning rate.')
 
 flags.DEFINE_float('decay_factor', 0.33, 'Learning rate decay factor.')
 
@@ -71,7 +71,9 @@ flags.DEFINE_float('decay_steps', 5000,
 
 flags.DEFINE_float('visit_weight', 0.2, 'Weight for visit loss.')
 
-flags.DEFINE_integer('max_steps', 100, 'Number of training steps.')
+flags.DEFINE_float('gpu_fraction', 1.0, 'Fraction of GPU to use.')
+
+flags.DEFINE_integer('max_steps', 20000, 'Number of training steps.')
 
 flags.DEFINE_string('logdir', '/tmp/semisup_', 'Training log path.')
 flags.DEFINE_bool('log_losses', False, 'Log losses during training')
@@ -83,7 +85,7 @@ IMAGE_SHAPE = cifar_tools.IMAGE_SHAPE
 
 def main(_):
   train_images, train_labels, tree = cifar_tools.get_data('train', FLAGS.sup_per_class, seed=1)
-  train_images_unsup, train_images_unsup_labels, _ = cifar_tools.get_data('train', FLAGS.unsup_per_class, seed=2)
+  #train_images_unsup, train_images_unsup_labels, _ = cifar_tools.get_data('train', FLAGS.unsup_per_class, seed=2)
   test_images, test_labels, _ = cifar_tools.get_data('test', FLAGS.test_per_class, seed=3)
 
   graph = tf.Graph()
@@ -118,10 +120,12 @@ def main(_):
     #summary_writer = tf.summary.FileWriter(FLAGS.logdir, graph)
 
     #saver = tf.train.Saver()
-  gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
+  gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=FLAGS.gpu_fraction)
 
   train_scores = [[] for _ in range(FLAGS.train_depth)]
   test_scores = [[] for _ in range(FLAGS.train_depth)]
+
+  #device_count={'GPU': 0}  for CPU mode
 
   with tf.Session(graph=graph, config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     tf.global_variables_initializer().run()

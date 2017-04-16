@@ -301,9 +301,9 @@ class SemisupModel(object):
       # define the weights for the node here
       # if a node is not relevant for classification of a sample, it is ignored
       #layer_weight = 0.1 if node_index == 0 else .4
-      layer_weight = tf.constant(1.0)
+      #layer_weight = tf.constant(1.0)
       weights = tf.slice(labels, [0, node_usages_offset+node_index], [num_samples, 1])
-      weights = tf.multiply(tf.cast(weights, tf.float32), tf.multiply(weight, layer_weight))
+      #weights = tf.multiply(tf.cast(weights, tf.float32), tf.multiply(weight, layer_weight))
 
       logit_loss = tf.losses.sparse_softmax_cross_entropy(
         labels_subset,

@@ -3,7 +3,7 @@
 import concurrent
 import subprocess
 import ast
-from time import sleep
+from time import time
 
 import numpy as np
 import threading
@@ -11,21 +11,25 @@ from concurrent.futures import *
 from subprocess import *
 
 
+PYTHON_NAME = 'python'
+
 def launchRun(name, params):
   train_scores = 0
   test_scores = 0
+
+  start = time()
 
   params_list = []
   for a in params.items():
     params_list = params_list + ['--'+str(a[0]), str(a[1])]
 
-  proc = subprocess.Popen(['python3', "../"+name+'.py'] + params_list, stdout=subprocess.PIPE)
+  proc = subprocess.Popen([PYTHON_NAME, "../"+name+'.py'] + params_list, stdout=subprocess.PIPE)
   #proc = subprocess.Popen(['echo'] + params_list, stdout=subprocess.PIPE)
   while True:
     line = proc.stdout.readline()
     if line != '' and len(line) > 0:  # todo quits on all empty lines, improve detection
       res = line.rstrip().decode()
-      #print(res)
+      print(res)
       type, scores = getAccuracy(res)
       if type is 'train':
         train_scores = scores
@@ -37,7 +41,9 @@ def launchRun(name, params):
   best_train_score = np.min(train_scores)
   best_test_score = np.min(test_scores)
 
-  return best_train_score, best_test_score, train_scores, test_scores
+  duration = time() - start
+
+  return best_train_score, best_test_score, train_scores, test_scores, duration
 
 
 def getAccuracy(line):
@@ -89,9 +95,9 @@ current_threads = []
 def make_call(name, item, index):
   print('launching '+name, item)
 
-  a,b,c,d = launchRun(name, item)
+  a,b,c,d,e = launchRun(name, item)
 
-  return index, [a,b,c,d]
+  return index, [a,b,c,d,e]
 
 def run(name, params):
   executor = ThreadPoolExecutor(2)
@@ -110,7 +116,8 @@ def run(name, params):
 
 
 
-
-
-
-run("cifar100_train_eval", {"a": [2,3,4]}   )
+run("cifar100_train_eval", {
+  "learning_rate": [1e-3,2e-3],
+  "eval_interval": [1000],
+  "max_steps": [2000]
+})
