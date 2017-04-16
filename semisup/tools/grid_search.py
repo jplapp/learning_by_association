@@ -1,17 +1,15 @@
 # basic hyperparameter grid search
 # just calls scripts using exec, and logs result
-import concurrent
 import subprocess
 import ast
 from time import time
 
 import numpy as np
-import threading
 from concurrent.futures import *
-from subprocess import *
 
 
-PYTHON_NAME = 'python'
+PYTHON_NAME = 'python3'
+NUM_THREADS = 4
 
 def launchRun(name, params):
   train_scores = 0
@@ -100,7 +98,7 @@ def make_call(name, item, index):
   return index, [a,b,c,d,e]
 
 def run(name, params):
-  executor = ThreadPoolExecutor(2)
+  executor = ThreadPoolExecutor(NUM_THREADS)
   tasks = create_task_list(params)
 
   futures = []
@@ -116,8 +114,9 @@ def run(name, params):
 
 
 
-run("cifar100_train_eval", {
-  "learning_rate": [1e-3,2e-3],
-  "eval_interval": [1000],
-  "max_steps": [2000]
-})
+if __name__ == '__main__':
+  run("cifar100_train_eval", {
+    "learning_rate": [1e-3, 2e-3],
+    "eval_interval": [1000],
+    "max_steps": [2000]
+  })
