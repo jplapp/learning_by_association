@@ -79,7 +79,10 @@ def create_task_list(combine_params):
     for v in firstKeyValues:
       new_dict = {firstKey: v}
 
-      task_list = task_list + [{**new_dict, **task} for task in subtasks]
+      for task in subtasks:
+        merged = new_dict.copy()
+        merged.update(task)
+        task_list = task_list + [merged]
 
   else:
     task_list = [{firstKey: v} for v in firstKeyValues]
