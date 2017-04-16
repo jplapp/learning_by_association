@@ -11,6 +11,8 @@ from concurrent.futures import *
 PYTHON_NAME = 'python3'
 NUM_THREADS = 4
 
+used_gpus = np.zeros(NUM_THREADS)
+
 def launchRun(name, params):
   train_scores = 0
   test_scores = 0
@@ -21,7 +23,12 @@ def launchRun(name, params):
   for a in params.items():
     params_list = params_list + ['--'+str(a[0]), str(a[1])]
 
-  proc = subprocess.Popen([PYTHON_NAME, "../"+name+'.py'] + params_list, stdout=subprocess.PIPE)
+  free_gpu = np.min(np.where(used_gpus == 0))
+  used_gpus[free_gpu] = 1
+
+  gpu_prefix = "CUDA_VISIBLE_DEVICES="+str(free_gpu)+ " "
+
+  proc = subprocess.Popen([gpu_prefix, PYTHON_NAME, "../"+name+'.py'] + params_list, stdout=subprocess.PIPE)
   #proc = subprocess.Popen(['echo'] + params_list, stdout=subprocess.PIPE)
   while True:
     line = proc.stdout.readline()
@@ -39,6 +46,7 @@ def launchRun(name, params):
   best_train_score = np.min(train_scores)
   best_test_score = np.min(test_scores)
 
+  used_gpus[free_gpu] = 0
   duration = time() - start
 
   return best_train_score, best_test_score, train_scores, test_scores, duration
