@@ -8,6 +8,7 @@ from time import time
 import numpy as np
 from concurrent.futures import *
 
+from multiprocessing import current_process
 
 PYTHON_NAME = 'python3'
 NUM_THREADS = 4
@@ -24,11 +25,8 @@ def launchRun(name, params):
   for a in params.items():
     params_list = params_list + ['--'+str(a[0]), str(a[1])]
 
-  free_gpu = np.min(np.where(used_gpus == 0))
-  used_gpus[free_gpu] = 1
-
   env = os.environ.copy()
-  env["CUDA_VISIBLE_DEVICES"] = free_gpu
+  env["CUDA_VISIBLE_DEVICES"] = current_process()._identity[0]-1
 
   proc = subprocess.Popen([PYTHON_NAME, "../"+name+'.py'] + params_list, env=env, stdout=subprocess.PIPE)
   #proc = subprocess.Popen(['echo'] + params_list, stdout=subprocess.PIPE)
@@ -48,7 +46,6 @@ def launchRun(name, params):
   best_train_score = np.min(train_scores)
   best_test_score = np.min(test_scores)
 
-  used_gpus[free_gpu] = 0
   duration = time() - start
 
   return best_train_score, best_test_score, train_scores, test_scores, duration
@@ -99,7 +96,6 @@ def create_task_list(combine_params):
 
   return task_list
 
-current_threads = []
 
 
 
@@ -111,7 +107,7 @@ def make_call(name, item, index):
   return index, [a,b,c,d,e]
 
 def run(name, params):
-  executor = ThreadPoolExecutor(NUM_THREADS)
+  executor = ProcessPoolExecutor(NUM_THREADS)
   tasks = create_task_list(params)
 
   futures = []
