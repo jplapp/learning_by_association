@@ -1,5 +1,6 @@
 # basic hyperparameter grid search
 # just calls scripts using exec, and logs result
+import os
 import subprocess
 import ast
 from time import time
@@ -26,9 +27,10 @@ def launchRun(name, params):
   free_gpu = np.min(np.where(used_gpus == 0))
   used_gpus[free_gpu] = 1
 
-  gpu_prefix = "CUDA_VISIBLE_DEVICES="+str(free_gpu)+ " "
+  env = os.environ.copy()
+  env["CUDA_VISIBLE_DEVICES"] = free_gpu
 
-  proc = subprocess.Popen([gpu_prefix, PYTHON_NAME, "../"+name+'.py'] + params_list, stdout=subprocess.PIPE)
+  proc = subprocess.Popen([PYTHON_NAME, "../"+name+'.py'] + params_list, env=env, stdout=subprocess.PIPE)
   #proc = subprocess.Popen(['echo'] + params_list, stdout=subprocess.PIPE)
   while True:
     line = proc.stdout.readline()
