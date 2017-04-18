@@ -34,6 +34,7 @@ import tensorflow as tf
 import semisup
 import numpy as np
 # np.set_printoptions(threshold=np.inf)
+from tensorflow.contrib import slim
 
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
@@ -117,47 +118,30 @@ def main(_):
     train_op = model.create_train_op(t_learning_rate)
     summary_op = tf.summary.merge_all()
 
-    #summary_writer = tf.summary.FileWriter(FLAGS.logdir, graph)
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=FLAGS.gpu_fraction)
 
-    #saver = tf.train.Saver()
-  gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=FLAGS.gpu_fraction)
+    train_scores = [[] for _ in range(FLAGS.train_depth)]
+    test_scores = [[] for _ in range(FLAGS.train_depth)]
 
-  train_scores = [[] for _ in range(FLAGS.train_depth)]
-  test_scores = [[] for _ in range(FLAGS.train_depth)]
+    def evaluate_test_set(sess):
 
-  #device_count={'GPU': 0}  for CPU mode
+      nodeLabels = classify(model, train_images, tree, sess)
+      walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
+                                     for label in train_labels])
 
-  with tf.Session(graph=graph, config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-    tf.global_variables_initializer().run()
+      for i in range(FLAGS.train_depth):
+        err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+                                   tree.level_sizes[i + 1], "train dimension " + str(i))
+        train_scores[i] = train_scores[i] + [err]
 
-    coord = tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+      nodeLabels = classify(model, test_images, tree, sess)
+      walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
+                                     for label in test_labels])
 
-    for step in range(FLAGS.max_steps):
-      _, summaries, *losses = sess.run([train_op, summary_op] + model.logit_losses + model.walker_losses + model.visit_losses)
-      if FLAGS.log_losses: print("losses:", losses)
-      if (step + 1) % FLAGS.eval_interval == 0 or step == 99:
-        print('Step: %d' % step)
-
-        nodeLabels = classify(model, train_images, tree)
-        walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
-                                       for label in train_labels])
-
-        for i in range(FLAGS.train_depth):
-          err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
-                               tree.level_sizes[i + 1], "train dimension " + str(i))
-          train_scores[i] = train_scores[i] + [err]
-
-
-        nodeLabels = classify(model, test_images, tree)
-        walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
-                                       for label in test_labels])
-
-        for i in range(FLAGS.train_depth):
-          err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
-                               tree.level_sizes[i + 1], "test dimension " + str(i))
-          test_scores[i] = test_scores[i] + [err]
-
+      for i in range(FLAGS.train_depth):
+        err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+                                   tree.level_sizes[i + 1], "test dimension " + str(i))
+        test_scores[i] = test_scores[i] + [err]
 
         # test_summary = tf.Summary(
         #   value=[tf.Summary.Value(
@@ -168,15 +152,39 @@ def main(_):
 
         # saver.save(sess, FLAGS.logdir, model.step)
 
-    coord.request_stop()
-    coord.join(threads)
+    # override function from slim.learning to include test set evaluation
+    def train_step(session, *args, **kwargs):
+      total_loss, should_stop = slim.learning.train_step(session, *args, **kwargs)
 
-    print('train accuracies', train_scores)
-    print('test accuracies', test_scores)
+      if train_step.step % FLAGS.eval_interval == 0 or train_step.step == 99:
+        print('Step: %d' % train_step.step)
+        evaluate_test_set(session)
+
+      train_step.step += 1
+      return total_loss, should_stop
+
+    train_step.step = 0
 
 
-def classify(model, images, tree):
-  pred = model.classify(images)
+    slim.learning.train(
+      train_op,
+      train_step_fn=train_step,
+      logdir=FLAGS.logdir,
+      summary_op=summary_op,
+      init_fn=None,
+      session_config=tf.ConfigProto(gpu_options=gpu_options,device_count={'GPU': 0}),
+      number_of_steps=FLAGS.max_steps,
+      save_summaries_secs=300,
+      log_every_n_steps=10,
+      save_interval_secs=600)
+
+
+  print('train accuracies', train_scores)
+  print('test accuracies', test_scores)
+
+
+def classify(model, images, tree, sess):
+  pred = model.classify(images, sess)
 
   res = []
 

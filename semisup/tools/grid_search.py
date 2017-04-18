@@ -26,7 +26,7 @@ def launchRun(name, params):
     params_list = params_list + ['--'+str(a[0]), str(a[1])]
 
   env = os.environ.copy()
-  env["CUDA_VISIBLE_DEVICES"] = current_process()._identity[0]-1
+  env["CUDA_VISIBLE_DEVICES"] = str(current_process()._identity[0]-1)
 
   proc = subprocess.Popen([PYTHON_NAME, "../"+name+'.py'] + params_list, env=env, stdout=subprocess.PIPE)
   #proc = subprocess.Popen(['echo'] + params_list, stdout=subprocess.PIPE)

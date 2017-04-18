@@ -360,14 +360,17 @@ class SemisupModel(object):
     self.train_op = slim.learning.create_train_op(self.train_loss, trainer)
     return self.train_op
 
-  def calc_embedding(self, images, endpoint):
+  def calc_embedding(self, images, endpoint, sess=None):
     """Evaluate 'endpoint' tensor for all 'images' using batches."""
     batch_size = self.test_batch_size
     emb = []
     for i in range(0, len(images), batch_size):
-      emb.append(endpoint.eval({self.test_in: images[i:i + batch_size]}))
+      if sess is not None:
+        emb.append(endpoint.eval({self.test_in: images[i:i + batch_size]}, session=sess))
+      else:
+        emb.append(endpoint.eval({self.test_in: images[i:i + batch_size]}))
     return np.concatenate(emb)
 
-  def classify(self, images):
+  def classify(self, images, sess=None):
     """Compute logit scores for provided images."""
-    return self.calc_embedding(images, self.test_logit)
+    return self.calc_embedding(images, self.test_logit, sess)

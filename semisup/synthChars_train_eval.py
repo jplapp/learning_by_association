@@ -25,14 +25,22 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+
 import tensorflow as tf
 import semisup
 import numpy as np
 # np.set_printoptions(threshold=np.inf)
+import time
+from tensorflow.contrib import slim
+from tensorflow.core.protobuf import config_pb2
+from tensorflow.python.client import timeline
+from tensorflow.python.lib.io import file_io
 
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
 from tools.tree import findLabelsFromTree, getWalkerLabel
+tf.logging.set_verbosity(tf.logging.INFO)
 
 FLAGS = flags.FLAGS
 
@@ -110,39 +118,23 @@ def main(_):
     train_op = model.create_train_op(t_learning_rate)
     summary_op = tf.summary.merge_all()
 
-    summary_writer = tf.summary.FileWriter(FLAGS.logdir, graph)
+    def evaluate_test_set(sess):
 
-    saver = tf.train.Saver()
+      nodeLabels = classify(model, train_images, tree, sess)
+      walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
+                                     for label in train_labels])
 
-  with tf.Session(graph=graph) as sess:
-    tf.global_variables_initializer().run()
+      for i in range(FLAGS.train_depth):
+        printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+                             tree.level_sizes[i + 1], "train dimension " + str(i))
 
-    coord = tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+      nodeLabels = classify(model, test_images, tree, sess)
+      walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
+                                     for label in test_labels])
 
-    for step in range(FLAGS.max_steps):
-      _, summaries, *losses = sess.run([train_op, summary_op] + [model.logit_loss] + model.walker_losses + model.visit_losses)
-      print("losses:", losses)
-      if (step + 1) % FLAGS.eval_interval == 0 or step == 99:
-        print('Step: %d' % step)
-
-        nodeLabels = classify(model, train_images, tree)
-        walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
-                                       for label in train_labels])
-
-        for i in range(FLAGS.train_depth):
-          printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
-                               tree.level_sizes[i + 1], "train dimension " + str(i))
-
-
-        nodeLabels = classify(model, test_images, tree)
-        walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
-                                       for label in test_labels])
-
-        for i in range(FLAGS.train_depth):
-          printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
-                               tree.level_sizes[i + 1], "test dimension " + str(i))
-
+      for i in range(FLAGS.train_depth):
+        printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+                             tree.level_sizes[i + 1], "test dimension " + str(i))
 
         # test_summary = tf.Summary(
         #   value=[tf.Summary.Value(
@@ -153,12 +145,32 @@ def main(_):
 
         # saver.save(sess, FLAGS.logdir, model.step)
 
-    coord.request_stop()
-    coord.join(threads)
+    # override function from slim.learning to include test set evaluation
+    def train_step(session, *args, **kwargs):
+      total_loss, should_stop = slim.learning.train_step(session, *args, **kwargs)
+
+      if (train_step.step+1) % FLAGS.eval_interval == 0 or train_step.step == 2:
+        print('Step: %d' % train_step.step)
+        evaluate_test_set(session)
+
+      train_step.step += 1
+      return total_loss, should_stop
+
+    train_step.step = 0
+
+    slim.learning.train(
+      train_op,
+      train_step_fn=train_step,
+      logdir=FLAGS.logdir,
+      summary_op=summary_op,
+      init_fn=None,
+      number_of_steps=FLAGS.max_steps,
+      save_summaries_secs=300,
+      save_interval_secs=600)
 
 
-def classify(model, images, tree):
-  pred = model.classify(images)
+def classify(model, images, tree, sess):
+  pred = model.classify(images, sess)
 
   res = []
 
