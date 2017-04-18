@@ -118,8 +118,6 @@ def main(_):
     train_op = model.create_train_op(t_learning_rate)
     summary_op = tf.summary.merge_all()
 
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=FLAGS.gpu_fraction)
-
     train_scores = [[] for _ in range(FLAGS.train_depth)]
     test_scores = [[] for _ in range(FLAGS.train_depth)]
 
@@ -165,6 +163,7 @@ def main(_):
 
     train_step.step = 0
 
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=FLAGS.gpu_fraction)
 
     slim.learning.train(
       train_op,
@@ -172,7 +171,7 @@ def main(_):
       logdir=FLAGS.logdir,
       summary_op=summary_op,
       init_fn=None,
-      session_config=tf.ConfigProto(gpu_options=gpu_options,device_count={'GPU': 0}),
+      session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
       number_of_steps=FLAGS.max_steps,
       save_summaries_secs=300,
       log_every_n_steps=10,

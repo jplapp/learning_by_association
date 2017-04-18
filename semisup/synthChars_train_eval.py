@@ -149,7 +149,7 @@ def main(_):
     def train_step(session, *args, **kwargs):
       total_loss, should_stop = slim.learning.train_step(session, *args, **kwargs)
 
-      if (train_step.step+1) % FLAGS.eval_interval == 0 or train_step.step == 2:
+      if (train_step.step+1) % FLAGS.eval_interval == 0 or train_step.step == 99:
         print('Step: %d' % train_step.step)
         evaluate_test_set(session)
 
