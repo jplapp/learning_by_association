@@ -40,7 +40,10 @@ def create_input(input_images, input_labels=None, batch_size=100):
   """
   if input_labels is not None:
     image, label = tf.train.slice_input_producer([input_images, input_labels])
-    return tf.train.batch([image, label], batch_size=batch_size)
+    return tf.train.batch([image, label],
+                          batch_size=batch_size,
+                          num_threads=4,
+                          capacity=2*batch_size)
   else:  # TODO this case does not work
     image = tf.train.slice_input_producer([input_images])
     return tf.train.batch(image, batch_size=batch_size)
