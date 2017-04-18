@@ -174,7 +174,7 @@ def main(_):
       session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
       number_of_steps=FLAGS.max_steps,
       save_summaries_secs=300,
-      log_every_n_steps=10,
+      log_every_n_steps=100,
       save_interval_secs=600)
 
 

@@ -30,12 +30,8 @@ import os
 import tensorflow as tf
 import semisup
 import numpy as np
-# np.set_printoptions(threshold=np.inf)
-import time
+
 from tensorflow.contrib import slim
-from tensorflow.core.protobuf import config_pb2
-from tensorflow.python.client import timeline
-from tensorflow.python.lib.io import file_io
 
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
