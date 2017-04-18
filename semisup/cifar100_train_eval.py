@@ -33,12 +33,12 @@ from __future__ import print_function
 import tensorflow as tf
 import semisup
 import numpy as np
-# np.set_printoptions(threshold=np.inf)
 from tensorflow.contrib import slim
 
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
 from tools.tree import findLabelsFromTree, getWalkerLabel
+tf.logging.set_verbosity(tf.logging.INFO)
 
 FLAGS = flags.FLAGS
 
@@ -51,7 +51,7 @@ flags.DEFINE_integer('unsup_per_class', 500,
 flags.DEFINE_integer('test_per_class', 20,
                      'Number of labeled samples used per class.')
 
-flags.DEFINE_integer('sup_batch_size', 64,
+flags.DEFINE_integer('sup_batch_size', 128,
                      'Number of labeled samples per batch.')
 
 flags.DEFINE_integer('unsup_batch_size', 64,
@@ -154,7 +154,7 @@ def main(_):
     def train_step(session, *args, **kwargs):
       total_loss, should_stop = slim.learning.train_step(session, *args, **kwargs)
 
-      if train_step.step % FLAGS.eval_interval == 0 or train_step.step == 99:
+      if (train_step.step+1) % FLAGS.eval_interval == 0 or train_step.step == 99:
         print('Step: %d' % train_step.step)
         evaluate_test_set(session)
 
@@ -168,8 +168,8 @@ def main(_):
     slim.learning.train(
       train_op,
       train_step_fn=train_step,
-      logdir=FLAGS.logdir,
-      summary_op=summary_op,
+      logdir=None,#FLAGS.logdir,
+      #summary_op=summary_op,
       init_fn=None,
       session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
       number_of_steps=FLAGS.max_steps,
