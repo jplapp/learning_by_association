@@ -37,6 +37,7 @@ from tensorflow.contrib import slim
 
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
+from tools.cifar100 import tree
 from tools.tree import findLabelsFromTree, getWalkerLabel
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -57,7 +58,7 @@ flags.DEFINE_integer('sup_batch_size', 128,
 flags.DEFINE_integer('unsup_batch_size', 64,
                      'Number of unlabeled samples per batch.')
 
-flags.DEFINE_integer('train_depth', 1,
+flags.DEFINE_integer('train_depth', 2,
                      'Max depth of tree to train')
 
 flags.DEFINE_integer('eval_interval', 500,
@@ -77,15 +78,52 @@ flags.DEFINE_float('gpu_fraction', 1.0, 'Fraction of GPU to use.')
 flags.DEFINE_integer('max_steps', 20000, 'Number of training steps.')
 
 flags.DEFINE_string('logdir', '/tmp/semisup_', 'Training log path.')
+flags.DEFINE_string('dataset_dir', '/tmp/cifar100', 'Dataset Location.')
 flags.DEFINE_bool('log_losses', False, 'Log losses during training')
 
-from tools import cifar100 as cifar_tools
+from tools import cifar100 as cifar_tools, dataset_factory, preprocessing_factory, cifar100
 
 IMAGE_SHAPE = cifar_tools.IMAGE_SHAPE
 
 
 def main(_):
-  train_images, train_labels, tree = cifar_tools.get_data('train', FLAGS.sup_per_class, seed=1)
+  preprocessing_name = "cifarnet"#FLAGS.preprocessing_name or FLAGS.model_name
+  image_preprocessing_fn = preprocessing_factory.get_preprocessing(
+    preprocessing_name,
+    is_training=True)
+
+  if not FLAGS.dataset_dir:
+    raise ValueError('You must supply the dataset directory with --dataset_dir')
+
+  trainDataset = dataset_factory.get_dataset(
+    'cifar100', 'train', FLAGS.dataset_dir)
+
+  trainProvider = slim.dataset_data_provider.DatasetDataProvider(
+    trainDataset,
+    num_readers=1,  # FLAGS.num_readers,
+    common_queue_capacity=20 * FLAGS.sup_batch_size,
+    common_queue_min=10 * FLAGS.sup_batch_size)
+  [train_images, train_labels] = trainProvider.get(['image', 'label'])
+
+  train_image_size = 32
+
+  train_images = image_preprocessing_fn(train_images, train_image_size, train_image_size)
+
+  testDataset = dataset_factory.get_dataset(
+    'cifar100', 'test', FLAGS.dataset_dir)
+  testProvider = slim.dataset_data_provider.DatasetDataProvider(
+    testDataset,
+    num_readers=1,  # FLAGS.num_readers,
+    common_queue_capacity=20 * FLAGS.sup_batch_size,
+    common_queue_min=10 * FLAGS.sup_batch_size)
+  [test_images, test_labels] = testProvider.get(['image', 'label'])
+  #test_images = image_preprocessing_fn(test_images, train_image_size, train_image_size)
+
+  #batch_queue = slim.prefetch_queue.prefetch_queue(
+  #  [images, labels], capacity=2 * deploy_config.num_clones)
+
+
+  #train_images, train_labels, tree = cifar_tools.get_data('train', FLAGS.sup_per_class, seed=1)
   #train_images_unsup, train_images_unsup_labels, _ = cifar_tools.get_data('train', FLAGS.unsup_per_class, seed=2)
   test_images, test_labels, _ = cifar_tools.get_data('test', FLAGS.test_per_class, seed=3)
 
@@ -95,11 +133,12 @@ def main(_):
                                  IMAGE_SHAPE, treeStructure=tree, maxDepth=FLAGS.train_depth)
 
     # Set up inputs.
-    #t_unsup_images, _ = semisup.create_input(train_images_unsup, train_images_unsup_labels,
+    #t_unsup_images, _ = semisup.create_input(train_images_unsup, train_labels_unsup,
     #                                         batch_size=FLAGS.unsup_batch_size)
     t_sup_images, t_sup_labels = semisup.create_input(train_images, train_labels,
                                                       FLAGS.sup_batch_size)
     # Compute embeddings and logits.
+    print(t_sup_images.shape)
     t_sup_emb = model.image_to_embedding(t_sup_images)
     #t_unsup_emb = model.image_to_embedding(t_unsup_images)
     t_sup_logit = model.embedding_to_logit(t_sup_emb)
@@ -123,14 +162,14 @@ def main(_):
 
     def evaluate_test_set(sess):
 
-      nodeLabels = classify(model, train_images, tree, sess)
-      walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
-                                     for label in train_labels])
+      #nodeLabels = classify(model, train_images, tree, sess)
+      #walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
+      #                               for label in train_labels])
 
-      for i in range(FLAGS.train_depth):
-        err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
-                                   tree.level_sizes[i + 1], "train dimension " + str(i))
-        train_scores[i] = train_scores[i] + [err]
+      #for i in range(FLAGS.train_depth):
+      #  err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+      #                             tree.level_sizes[i + 1], "train dimension " + str(i))
+      #  train_scores[i] = train_scores[i] + [err]
 
       nodeLabels = classify(model, test_images, tree, sess)
       walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
@@ -169,12 +208,14 @@ def main(_):
       train_op,
       train_step_fn=train_step,
       logdir=None,#FLAGS.logdir,
+      logdir_trace='/tmp/semisup2',
       #summary_op=summary_op,
       init_fn=None,
       session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
       number_of_steps=FLAGS.max_steps,
       save_summaries_secs=300,
-      log_every_n_steps=100,
+      log_every_n_steps=10,
+      #trace_every_n_steps=10,
       save_interval_secs=600)
 
 

@@ -6,8 +6,8 @@ Tree structure for hierarchical classification
 import itertools
 import numpy as np
 
-
 class TreeStructure:
+
   def __init__(self, root_node):
     """
     :param root_node: instance of TreeNode, the root of the tree

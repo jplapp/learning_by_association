@@ -39,8 +39,8 @@ def create_input(input_images, input_labels=None, batch_size=100):
     A list containing the images and labels batches.
   """
   if input_labels is not None:
-    image, label = tf.train.slice_input_producer([input_images, input_labels])
-    return tf.train.batch([image, label],
+    #image, label = tf.train.slice_input_producer([input_images, input_labels])
+    return tf.train.batch([input_images, input_labels],
                           batch_size=batch_size,
                           num_threads=4,
                           capacity=2*batch_size)
@@ -188,9 +188,9 @@ class SemisupModel(object):
 
     # visit loss would be the same for all layers, so it's only added once here
     # todo does that make sense?
-    self.add_visit_loss(p_ab, visit_weight)
+    #self.add_visit_loss(p_ab, visit_weight)
 
-    for d in range(min(self.maxDepth, self.treeStructure.depth)):
+    for d in range(1):#min(self.maxDepth, self.treeStructure.depth)):
       labels_d = tf.slice(labels, [0, level_index_offset + d],[num_samples, 1])
       labels_d = tf.reshape(labels_d, [-1]) # necessary for next reshape
 
@@ -294,7 +294,6 @@ class SemisupModel(object):
     node_index = 0
 
     for node in nodes:
-      print(node.depth)
       if node.depth >= self.maxDepth: continue
 
       logits_subset = tf.slice(logits, [0, self.treeStructure.offsets[node_index]],
@@ -368,10 +367,7 @@ class SemisupModel(object):
     batch_size = self.test_batch_size
     emb = []
     for i in range(0, len(images), batch_size):
-      if sess is not None:
-        emb.append(endpoint.eval({self.test_in: images[i:i + batch_size]}, session=sess))
-      else:
-        emb.append(endpoint.eval({self.test_in: images[i:i + batch_size]}))
+      emb.append(endpoint.eval({self.test_in: images[i:i + batch_size]}, session=sess))
     return np.concatenate(emb)
 
   def classify(self, images, sess=None):

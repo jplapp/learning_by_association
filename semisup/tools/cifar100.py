@@ -32,7 +32,7 @@ for i in range(20):
 root = TreeNode("root", children=nodes)
 
 #for testing: tree with only leafs
-root = TreeNode("root", leafs=range(100))
+#root = TreeNode("root", leafs=range(100))
 
 tree = TreeStructure(root)
 
