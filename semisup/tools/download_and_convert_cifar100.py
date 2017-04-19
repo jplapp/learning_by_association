@@ -35,7 +35,7 @@ import numpy as np
 from six.moves import urllib
 import tensorflow as tf
 
-from tools import dataset_utils
+from tools import dataset_utils, data_dirs
 
 # The URL where the CIFAR data can be downloaded.
 _DATA_URL = 'https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz'
@@ -140,7 +140,7 @@ def _clean_up_temporary_files(dataset_dir):
   filepath = os.path.join(dataset_dir, filename)
   tf.gfile.Remove(filepath)
 
-  tmp_dir = os.path.join(dataset_dir, 'cifar-100-batches-py')
+  tmp_dir = os.path.join(dataset_dir, 'cifar-100-python')
   tf.gfile.DeleteRecursively(tmp_dir)
 
 
@@ -185,4 +185,4 @@ def run(dataset_dir):
   _clean_up_temporary_files(dataset_dir)
   print('\nFinished converting the Cifar100 dataset!')
 
-run('/tmp/cifar100/')
+run(data_dirs.cifar100)
