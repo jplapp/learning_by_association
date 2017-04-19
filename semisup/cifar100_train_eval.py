@@ -39,6 +39,8 @@ from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
 from tools.cifar100 import tree
 from tools.tree import findLabelsFromTree, getWalkerLabel
+from tools import cifar100 as cifar_tools, dataset_factory, preprocessing_factory, cifar100, data_dirs
+
 tf.logging.set_verbosity(tf.logging.INFO)
 
 FLAGS = flags.FLAGS
@@ -61,12 +63,12 @@ flags.DEFINE_integer('unsup_batch_size', 64,
 flags.DEFINE_integer('train_depth', 2,
                      'Max depth of tree to train')
 
-flags.DEFINE_integer('eval_interval', 500,
+flags.DEFINE_integer('eval_interval', 1000,
                      'Number of steps between evaluations.')
 
 flags.DEFINE_float('learning_rate', 1e-3, 'Initial learning rate.')
 
-flags.DEFINE_float('decay_factor', 0.33, 'Learning rate decay factor.')
+flags.DEFINE_float('decay_factor', 0.5, 'Learning rate decay factor.')
 
 flags.DEFINE_float('decay_steps', 5000,
                    'Learning rate decay interval in steps.')
@@ -75,13 +77,11 @@ flags.DEFINE_float('visit_weight', 0.2, 'Weight for visit loss.')
 
 flags.DEFINE_float('gpu_fraction', 1.0, 'Fraction of GPU to use.')
 
-flags.DEFINE_integer('max_steps', 40000, 'Number of training steps.')
+flags.DEFINE_integer('max_steps', 60000, 'Number of training steps.')
 
 flags.DEFINE_string('logdir', '/tmp/semisup_', 'Training log path.')
-flags.DEFINE_string('dataset_dir', '/tmp/cifar100', 'Dataset Location.')
+flags.DEFINE_string('dataset_dir', data_dirs.cifar100, 'Dataset Location.')
 flags.DEFINE_bool('log_losses', False, 'Log losses during training')
-
-from tools import cifar100 as cifar_tools, dataset_factory, preprocessing_factory, cifar100
 
 IMAGE_SHAPE = cifar_tools.IMAGE_SHAPE
 
