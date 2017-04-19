@@ -212,7 +212,7 @@ def main(_):
       train_op,
       train_step_fn=train_step,
       logdir=None,#FLAGS.logdir,
-      logdir_trace='/tmp/semisup2',
+      #logdir_trace='/tmp/semisup2',
       #summary_op=summary_op,
       init_fn=None,
       session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
