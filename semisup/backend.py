@@ -43,7 +43,7 @@ def create_input(input_images, input_labels=None, batch_size=100):
     return tf.train.batch([input_images, input_labels],
                           batch_size=batch_size,
                           num_threads=4,
-                          capacity=2*batch_size)
+                          capacity=4*batch_size)
   else:  # TODO this case does not work
     image = tf.train.slice_input_producer([input_images])
     return tf.train.batch(image, batch_size=batch_size)
@@ -179,7 +179,6 @@ class SemisupModel(object):
     """
     num_samples = int(labels.get_shape()[0])
     level_index_offset = self.treeStructure.num_nodes
-    print(level_index_offset)
 
     match_ab = tf.matmul(a, b, transpose_b=True, name='match_ab')
     p_ab = tf.nn.softmax(match_ab, name='p_ab')
@@ -269,7 +268,6 @@ class SemisupModel(object):
   def add_logit_loss(self, logits, labels, weight=1.0):
     """Add supervised classification loss to the model."""
 
-    print(logits.get_shape(), labels)
     logit_loss = tf.losses.sparse_softmax_cross_entropy(
         labels,
         logits,
@@ -302,10 +300,9 @@ class SemisupModel(object):
 
       # define the weights for the node here
       # if a node is not relevant for classification of a sample, it is ignored
-      #layer_weight = 0.1 if node_index == 0 else .4
-      #layer_weight = tf.constant(1.0)
+      layer_weight = 1. if node.depth == 0 else .4
       weights = tf.slice(labels, [0, node_usages_offset+node_index], [num_samples, 1])
-      #weights = tf.multiply(tf.cast(weights, tf.float32), tf.multiply(weight, layer_weight))
+      weights = tf.multiply(tf.cast(weights, tf.float32), tf.multiply(weight, tf.constant(layer_weight)))
 
       logit_loss = tf.losses.sparse_softmax_cross_entropy(
         labels_subset,
@@ -370,6 +367,15 @@ class SemisupModel(object):
       emb.append(endpoint.eval({self.test_in: images[i:i + batch_size]}, session=sess))
     return np.concatenate(emb)
 
+  def materializeTensors(self, tensors, count, sess):
+    results = [np.zeros([count]+list(tensor.shape)) for tensor in tensors]
+
+    for i in range(count):
+      res = sess.run(tensors)
+      results[0][i, :,:,:] = res[0]
+      results[1][i, :] = res[1]
+
+    return results
   def classify(self, images, sess=None):
     """Compute logit scores for provided images."""
     return self.calc_embedding(images, self.test_logit, sess)

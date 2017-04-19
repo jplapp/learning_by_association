@@ -141,7 +141,7 @@ def get_data(name, num_per_class=10, seed=47):
   return [selectedImages, labels, tree]
 
 
-res = get_data('train')
+#res = get_data('train')
 #a = 2
 
 
