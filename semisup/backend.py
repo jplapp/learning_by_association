@@ -188,7 +188,7 @@ class SemisupModel(object):
     # visit loss would be the same for all layers, so it's only added once here
     self.add_visit_loss(p_ab, visit_weight)
 
-    for d in range(1):#min(self.maxDepth, self.treeStructure.depth)):
+    for d in range(min(self.maxDepth, self.treeStructure.depth)):
       labels_d = tf.slice(labels, [0, level_index_offset + d],[num_samples, 1])
       labels_d = tf.reshape(labels_d, [-1]) # necessary for next reshape
 
@@ -328,7 +328,7 @@ class SemisupModel(object):
     level_offsets = self.treeStructure.level_offsets
     level_sizes = self.treeStructure.level_sizes
 
-    for d in range(min(self.maxDepth, self.treeStructure.depth)):
+    for d in range(2):#min(self.maxDepth, self.treeStructure.depth)):
 
       logits_subset = tf.slice(logits, [0, level_offsets[d]],
                                [num_samples, level_sizes[d+1]])
