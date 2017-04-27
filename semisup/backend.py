@@ -186,8 +186,7 @@ class SemisupModel(object):
     p_aba = tf.matmul(p_ab, p_ba, name='p_aba')
 
     # visit loss would be the same for all layers, so it's only added once here
-    # todo does that make sense?
-    #self.add_visit_loss(p_ab, visit_weight)
+    self.add_visit_loss(p_ab, visit_weight)
 
     for d in range(1):#min(self.maxDepth, self.treeStructure.depth)):
       labels_d = tf.slice(labels, [0, level_index_offset + d],[num_samples, 1])
@@ -203,7 +202,7 @@ class SemisupModel(object):
       loss_aba = tf.losses.softmax_cross_entropy(
         p_target,
         tf.log(1e-8 + p_aba),
-        weights=walker_weight * np.exp(-d/2),
+        weights=walker_weight,# * np.exp(-d/2),
         scope='loss_aba'+str(d))
 
       tf.summary.scalar('Loss_aba'+str(d), loss_aba)
@@ -313,6 +312,38 @@ class SemisupModel(object):
       tf.summary.scalar('Loss_Logit_'+str(node_index), logit_loss)
       self.logit_losses = self.logit_losses + [logit_loss]
       node_index = node_index + 1
+
+  def add_tree_multitask_logit_loss(self, logits, labels, weight=1.0):
+    """Add supervised classification loss to the model.
+       For a hierarchical tree"""
+
+    # labels are separated by nodes
+    # calculate a softmax for every node
+    # use node indices to weight the softmax (if a node is not relevant for a sample)
+
+    # which nodes should contribute to the loss for a sample
+    # this is induced by the tree
+    num_samples = int(logits.get_shape()[0])
+    level_index_offset = self.treeStructure.num_nodes
+    level_offsets = self.treeStructure.level_offsets
+    level_sizes = self.treeStructure.level_sizes
+
+    for d in range(min(self.maxDepth, self.treeStructure.depth)):
+
+      logits_subset = tf.slice(logits, [0, level_offsets[d]],
+                               [num_samples, level_sizes[d+1]])
+      labels_subset = tf.slice(labels, [0, level_index_offset+d], [num_samples, 1]) # labels are not one-hot encoded
+
+      layer_weight = 1. #if node.depth == 0 else .4
+
+      logit_loss = tf.losses.sparse_softmax_cross_entropy(
+        labels_subset,
+        logits_subset,
+        scope='loss_logit_depth_' + str(d),
+        weights=layer_weight)
+
+      tf.summary.scalar('Loss_Logit_'+str(d), logit_loss)
+      self.logit_losses = self.logit_losses + [logit_loss]
 
   def create_walk_statistics(self, p_aba, equality_matrix):
     """Adds "walker" loss statistics to the graph.

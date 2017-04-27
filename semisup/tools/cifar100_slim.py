@@ -30,7 +30,11 @@ slim = tf.contrib.slim
 
 _FILE_PATTERN = 'cifar100_%s.tfrecord'
 
-SPLITS_TO_SIZES = {'train': 50000, 'test': 10000}
+SPLITS_TO_SIZES = {
+  'train': 50000,
+  'train_sup': 25000,
+  'train_unsup': 25000,
+  'test': 10000}
 
 _NUM_CLASSES = 100
 

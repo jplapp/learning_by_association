@@ -3,7 +3,6 @@ Tree structure for hierarchical classification
 
 
 """
-import itertools
 import numpy as np
 
 class TreeStructure:
@@ -13,13 +12,14 @@ class TreeStructure:
     :param root_node: instance of TreeNode, the root of the tree
     """
     self.level_sizes = root_node.computeLevelIndices()
+    self.level_offsets = [0] + list(accumulate(self.level_sizes[1:]))
     root_node.assignLabels()
 
     self.nodes = root_node.getNodes()
     self.num_nodes = len(self.nodes)
     self.node_sizes = [len(n.children) for n in self.nodes]
 
-    self.offsets = [0] + list(itertools.accumulate(self.node_sizes))
+    self.offsets = [0] + list(accumulate(self.node_sizes))
     self.num_labels = self.offsets[-1]  # number of all labels (NUM_LABELS + NUM_NODES -1)
     self.lookupMap = createLabelNodeMap(root_node)
     self.depth = root_node.getDepth()
@@ -78,7 +78,7 @@ class TreeNode:
     self.children = self.children + [node]
     self.isLeaf = False
 
-  def print(self):
+  def prints(self):
     result = str(self.label) + "," \
              + str(self.dataLabel) + "," \
              + str(self.levelLabel) + "," \
@@ -87,7 +87,7 @@ class TreeNode:
       result = "\n" + result + "\n"
 
     for child in self.children:
-      result = result + child.print()
+      result = result + child.prints()
 
     return result
 
@@ -139,10 +139,10 @@ class TreeNode:
       for node in nodes:
         children = children + node.children
         for child in node.children:
-          childLabels = labels.copy()
+          childLabels = list(labels)
           childLabels[nodeIndex] = child.label
 
-          childGroupFlags = groupFlags.copy()
+          childGroupFlags = list(groupFlags)
           childGroupFlags[nodeIndex] = 1
 
           child.labels = node.labels + childLabels
@@ -231,3 +231,33 @@ def findLabelsFromTree(treeStructure, pred):
     node = node.children[next_child_ind]
 
   return node.walkerLabels, node.dataLabel
+
+def findLabelsFromTreeMultitask(treeStructure, pred):
+  """
+  Given a prediction, finds WALKER label of nodes in the tree
+  Traverses the tree, takes the child with highest probability at every node
+  :param treeStructure: A TreeStructure Object
+  :param pred: prediction vector
+  :return: walker label of test result, and data label
+  """
+  labels = []
+  for d in range(0, treeStructure.depth):
+    level_pred = pred[treeStructure.level_offsets[d] :
+      treeStructure.level_offsets[d]+treeStructure.level_sizes[d+1]]
+
+    labels= labels + [np.argmax(level_pred)]
+
+  return labels
+
+def accumulate(iterable):
+  'Return running totals'
+  # accumulate([1,2,3,4,5]) --> 1 3 6 10 15
+  it = iter(iterable)
+  try:
+    total = next(it)
+  except StopIteration:
+    return
+  yield total
+  for element in it:
+    total = total + element
+    yield total

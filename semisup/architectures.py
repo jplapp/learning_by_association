@@ -103,12 +103,6 @@ def cifar_model(inputs,
   if image_summary:
     tf.summary.image('Inputs', inputs, max_outputs=3)
 
-  #inputs = inputs
-  #inputs = (inputs - 128.0) / 128.0
-
-  # mean = tf.reduce_mean(net, [1, 2], True)
-  # std = tf.reduce_mean(tf.square(net - mean), [1, 2], True)
-  # net = (net - mean) / (std + 1e-5)
   end_points = {}
   print('shape', inputs.shape)
   with slim.arg_scope(

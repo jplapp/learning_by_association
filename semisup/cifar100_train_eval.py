@@ -38,7 +38,7 @@ from tensorflow.contrib import slim
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
 from tools.cifar100 import tree
-from tools.tree import findLabelsFromTree, getWalkerLabel
+from tools.tree import findLabelsFromTree, getWalkerLabel, findLabelsFromTreeMultitask
 from tools import cifar100 as cifar_tools, dataset_factory, preprocessing_factory, cifar100, data_dirs
 
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -57,7 +57,7 @@ flags.DEFINE_integer('test_per_class', 20,
 flags.DEFINE_integer('sup_batch_size', 128,
                      'Number of labeled samples per batch.')
 
-flags.DEFINE_integer('unsup_batch_size', 64,
+flags.DEFINE_integer('unsup_batch_size', 128,
                      'Number of unlabeled samples per batch.')
 
 flags.DEFINE_integer('train_depth', 2,
@@ -68,18 +68,18 @@ flags.DEFINE_integer('eval_interval', 1000,
 
 flags.DEFINE_float('learning_rate', 1e-3, 'Initial learning rate.')
 
-flags.DEFINE_float('decay_factor', 0.5, 'Learning rate decay factor.')
+flags.DEFINE_float('decay_factor', 0.2, 'Learning rate decay factor.')
 
-flags.DEFINE_float('decay_steps', 5000,
+flags.DEFINE_float('decay_steps', 10000,
                    'Learning rate decay interval in steps.')
 
-flags.DEFINE_float('visit_weight', 0.2, 'Weight for visit loss.')
+flags.DEFINE_float('visit_weight', 1., 'Weight for visit loss.')
 
 flags.DEFINE_float('gpu_fraction', 1.0, 'Fraction of GPU to use.')
 
-flags.DEFINE_integer('max_steps', 60000, 'Number of training steps.')
+flags.DEFINE_integer('max_steps', 80000, 'Number of training steps.')
 
-flags.DEFINE_string('logdir', '/tmp/semisup_', 'Training log path.')
+flags.DEFINE_string('logdir', '/tmp/semisupMultitaskLBAvisit', 'Training log path.')
 flags.DEFINE_string('dataset_dir', data_dirs.cifar100, 'Dataset Location.')
 flags.DEFINE_bool('log_losses', False, 'Log losses during training')
 
@@ -100,19 +100,31 @@ def main(_):
       raise ValueError('You must supply the dataset directory with --dataset_dir')
 
     with tf.device('/device:CPU:0'):  #preprocessing on cpu is apparently way faster
-      trainDataset = dataset_factory.get_dataset(
-        'cifar100', 'train', FLAGS.dataset_dir)
+      trainDatasetSup = dataset_factory.get_dataset(
+        'cifar100', 'train_sup', FLAGS.dataset_dir)
 
-      trainProvider = slim.dataset_data_provider.DatasetDataProvider(
-        trainDataset,
+      trainProviderSup = slim.dataset_data_provider.DatasetDataProvider(
+        trainDatasetSup,
         num_readers=4,  # FLAGS.num_readers,
         common_queue_capacity=10 * FLAGS.sup_batch_size,
         common_queue_min=5 * FLAGS.sup_batch_size)
-      [train_images, train_labels] = trainProvider.get(['image', 'label'])
+      [train_images_sup, train_labels_sup] = trainProviderSup.get(['image', 'label'])
 
       train_image_size = 32
 
-      train_images = image_preprocessing_fn(train_images, train_image_size, train_image_size)
+      train_images_sup = image_preprocessing_fn(train_images_sup, train_image_size, train_image_size)
+
+      trainDatasetUnsup = dataset_factory.get_dataset(
+        'cifar100', 'train_unsup', FLAGS.dataset_dir)
+
+      trainProviderUnsup = slim.dataset_data_provider.DatasetDataProvider(
+        trainDatasetUnsup,
+        num_readers=4,  # FLAGS.num_readers,
+        common_queue_capacity=10 * FLAGS.sup_batch_size,
+        common_queue_min=5 * FLAGS.sup_batch_size)
+      [train_images_unsup, train_labels_unsup] = trainProviderUnsup.get(['image', 'label'])
+
+      train_images_unsup = image_preprocessing_fn(train_images_unsup, train_image_size, train_image_size)
 
 
       testDataset = dataset_factory.get_dataset(
@@ -126,29 +138,24 @@ def main(_):
       test_images = image_preprocessing_fn(test_images, train_image_size, train_image_size)
 
 
-
-    #train_images, train_labels, tree = cifar_tools.get_data('train', FLAGS.sup_per_class, seed=1)
-    #train_images_unsup, train_images_unsup_labels, _ = cifar_tools.get_data('train', FLAGS.unsup_per_class, seed=2)
-    #test_images, test_labels, _ = cifar_tools.get_data('test', FLAGS.test_per_class, seed=3)
-
     model = semisup.SemisupModel(semisup.architectures.cifar_model, tree.num_labels,
                                  IMAGE_SHAPE, treeStructure=tree, maxDepth=FLAGS.train_depth)
 
     # Set up inputs.
-    #t_unsup_images, _ = semisup.create_input(train_images_unsup, train_labels_unsup,
-    #                                         batch_size=FLAGS.unsup_batch_size)
-    t_sup_images, t_sup_labels = semisup.create_input(train_images, train_labels,
+    t_unsup_images, _ = semisup.create_input(train_images_unsup, train_labels_unsup,
+                                             batch_size=FLAGS.unsup_batch_size)
+    t_sup_images, t_sup_labels = semisup.create_input(train_images_sup, train_labels_sup,
                                                       FLAGS.sup_batch_size)
 
     # Compute embeddings and logits.
     t_sup_emb = model.image_to_embedding(t_sup_images)
-    #t_unsup_emb = model.image_to_embedding(t_unsup_images)
+    t_unsup_emb = model.image_to_embedding(t_unsup_images)
     t_sup_logit = model.embedding_to_logit(t_sup_emb)
 
     # Add losses.
-    #model.add_tree_semisup_loss(
-    #  t_sup_emb, t_unsup_emb, t_sup_labels, visit_weight=FLAGS.visit_weight)
-    model.add_tree_logit_loss(t_sup_logit, t_sup_labels, weight=1.)
+    model.add_tree_semisup_loss(
+      t_sup_emb, t_unsup_emb, t_sup_labels, visit_weight=FLAGS.visit_weight)
+    model.add_tree_multitask_logit_loss(t_sup_logit, t_sup_labels, weight=1.)
 
     t_learning_rate = tf.train.exponential_decay(
       FLAGS.learning_rate,
@@ -164,7 +171,8 @@ def main(_):
 
     def evaluate_test_set(sess):
 
-      ti, tl = model.materializeTensors([train_images, train_labels], 5000, sess)
+      ti, tl = model.materializeTensors([train_images_sup, train_labels_sup], 5000, sess)
+
       nodeLabels = classify(model, ti, tree, sess)
       walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
                                      for label in tl])
@@ -174,7 +182,7 @@ def main(_):
         train_scores[i] = train_scores[i] + [err]
 
       #todo make sure this gets all test images
-      ti, tl = model.materializeTensors([test_images, test_labels], 5000, sess)
+      ti, tl = model.materializeTensors([test_images, test_labels], 10000, sess)
       nodeLabels = classify(model, ti, tree, sess)
       walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
                                      for label in tl])
@@ -211,16 +219,14 @@ def main(_):
     slim.learning.train(
       train_op,
       train_step_fn=train_step,
-      logdir=None,#FLAGS.logdir,
-      #logdir_trace='/tmp/semisup2',
-      #summary_op=summary_op,
-      init_fn=None,
+      logdir=FLAGS.logdir,
+      summary_op=summary_op,
       session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
       number_of_steps=FLAGS.max_steps,
       save_summaries_secs=300,
-      log_every_n_steps=100,
+      log_every_n_steps=500,
       #trace_every_n_steps=10,
-      save_interval_secs=600)
+      save_interval_secs=300)
 
 
     print('train accuracies', train_scores)
@@ -233,7 +239,7 @@ def classify(model, images, tree, sess):
   res = []
 
   for i in range(pred.shape[0]):
-    nodes, _ = findLabelsFromTree(tree, pred[i, :])
+    nodes = findLabelsFromTreeMultitask(tree, pred[i, :])
 
     res = res + [nodes]
 
