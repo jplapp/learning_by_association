@@ -44,6 +44,8 @@ _DATA_URL = 'https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz'
 _NUM_TRAIN_FILES = 1
 
 _ADD_UNSUP = True
+#_ADD_UNSUP = False
+_DROP_FACTOR=2
 
 # The height and width of each image.
 _IMAGE_SIZE = 32
@@ -53,7 +55,7 @@ _CLASS_NAMES = ['class'+str(i) for i in range(100)] # todo ofc this could be act
 
 from tools.cifar100 import tree
 
-def _add_to_tfrecord(filename, tfrecord_writer, offset=0, drop_images=False, drop_scalar=0):
+def _add_to_tfrecord(filename, tfrecord_writer, offset=0, drop_images=False, drop_factor=0,drop_zero=True):
   """Loads data from the cifar100 pickle files and writes files to a TFRecord.
 
   Args:
@@ -81,8 +83,9 @@ def _add_to_tfrecord(filename, tfrecord_writer, offset=0, drop_images=False, dro
     with tf.Session('') as sess:
 
       for j in range(num_images):
-        if drop_images and j % 2 == drop_scalar:
-          continue
+        if drop_images:
+          if j % drop_factor == 0 and drop_zero: continue
+          if j % drop_factor != 0 and not drop_zero: continue
         sys.stdout.write('\r>> Reading file [%s] image %d/%d' % (
             filename, offset + j + 1, offset + num_images))
         sys.stdout.flush()
@@ -175,13 +178,13 @@ def run(dataset_dir):
       filename = os.path.join(dataset_dir,
                               'cifar-100-python',
                               'train')
-      _add_to_tfrecord(filename, tfrecord_writer, drop_images=True, drop_scalar=0)
+      _add_to_tfrecord(filename, tfrecord_writer, drop_images=True, drop_factor=_DROP_FACTOR, drop_zero=False)
     # Add second split with unsupervised data
     with tf.python_io.TFRecordWriter(training_filename_unsup) as tfrecord_writer:
       filename = os.path.join(dataset_dir,
                               'cifar-100-python',
                               'train')
-      _add_to_tfrecord(filename, tfrecord_writer, drop_images=True, drop_scalar=1)
+      _add_to_tfrecord(filename, tfrecord_writer, drop_images=True, drop_factor=_DROP_FACTOR, drop_zero=True)
 
   else:
     with tf.python_io.TFRecordWriter(training_filename) as tfrecord_writer:
