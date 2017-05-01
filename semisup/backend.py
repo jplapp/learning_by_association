@@ -183,8 +183,6 @@ class SemisupModel(object):
     match_ab = tf.matmul(a, b, transpose_b=True, name='match_ab')
     p_ab = tf.nn.softmax(match_ab, name='p_ab')
     p_ba = tf.nn.softmax(tf.transpose(match_ab), name='p_ba')
-    p_aba = tf.matmul(p_ab, p_ba, name='p_aba')
-
     # visit loss would be the same for all layers, so it's only added once here
     self.add_visit_loss(p_ab, visit_weight)
 
@@ -197,6 +195,7 @@ class SemisupModel(object):
       p_target = (equality_matrix / tf.reduce_sum(
         equality_matrix, [1], keep_dims=True))
 
+      p_aba = tf.matmul(p_ab, p_ba, name='p_aba'+str(d))#todo move up again, only here because of walk statistics (otherwise same variable would be added to summary twice)
       self.create_walk_statistics(p_aba, equality_matrix)
 
       loss_aba = tf.losses.softmax_cross_entropy(
