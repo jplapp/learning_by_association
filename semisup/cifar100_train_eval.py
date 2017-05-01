@@ -33,6 +33,7 @@ from __future__ import print_function
 import tensorflow as tf
 import semisup
 import numpy as np
+from random import randint
 from tensorflow.contrib import slim
 
 from tensorflow.python.platform import app
@@ -60,26 +61,27 @@ flags.DEFINE_integer('sup_batch_size', 128,
 flags.DEFINE_integer('unsup_batch_size', 128,
                      'Number of unlabeled samples per batch.')
 
-flags.DEFINE_integer('train_depth', 2,
+flags.DEFINE_integer('train_depth', 1,#logit is hardcoded to 2, walker depends on that here
                      'Max depth of tree to train')
 
 flags.DEFINE_integer('eval_interval', 1000,
                      'Number of steps between evaluations.')
 
-flags.DEFINE_float('learning_rate', 1e-3, 'Initial learning rate.')
+flags.DEFINE_float('learning_rate',0.1, 'Initial learning rate.')
 
-flags.DEFINE_float('decay_factor', 0.2, 'Learning rate decay factor.')
+flags.DEFINE_float('decay_factor', 0.1, 'Learning rate decay factor.')
 
-flags.DEFINE_float('decay_steps', 10000,
+flags.DEFINE_float('decay_steps', 15000,
                    'Learning rate decay interval in steps.')
 
 flags.DEFINE_float('visit_weight', 1., 'Weight for visit loss.')
 
 flags.DEFINE_float('gpu_fraction', 1.0, 'Fraction of GPU to use.')
 
-flags.DEFINE_integer('max_steps', 80000, 'Number of training steps.')
+flags.DEFINE_integer('max_steps', 100000, 'Number of training steps.')
 
-flags.DEFINE_string('logdir', '/tmp/semisupMultitaskLBAvisit', 'Training log path.')
+flags.DEFINE_string('logdir','/data/logs', 'Training log path.')
+flags.DEFINE_bool('randomize_logdir', False, 'Whether to add a random string to the logdir to make it unique')
 flags.DEFINE_string('dataset_dir', data_dirs.cifar100, 'Dataset Location.')
 flags.DEFINE_bool('log_losses', False, 'Log losses during training')
 
@@ -215,11 +217,15 @@ def main(_):
     train_step.step = 0
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=FLAGS.gpu_fraction)
+    
+    logdir = FLAGS.logdir
+    if FLAGS.randomize_logdir:
+      logdir = logdir + str(randint(0,99999))
 
     slim.learning.train(
       train_op,
       train_step_fn=train_step,
-      logdir=FLAGS.logdir,
+      logdir=logdir,
       summary_op=summary_op,
       session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
       number_of_steps=FLAGS.max_steps,
