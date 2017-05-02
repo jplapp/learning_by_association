@@ -43,7 +43,7 @@ def create_input(input_images, input_labels=None, batch_size=100):
     return tf.train.batch([input_images, input_labels],
                           batch_size=batch_size,
                           num_threads=4,
-                          capacity=4*batch_size)
+                          capacity=2*batch_size)
   else:  # TODO this case does not work
     image = tf.train.slice_input_producer([input_images])
     return tf.train.batch(image, batch_size=batch_size)
@@ -360,10 +360,23 @@ class SemisupModel(object):
     per_row_accuracy = 1.0 - tf.reduce_sum((equality_matrix * p_aba), 1)**0.5
     estimate_error = tf.reduce_mean(
         1.0 - per_row_accuracy, name=p_aba.name[:-2] + '_esterr')
+
+    # for every sample, check how likely we can reach another sample from the same class
+    per_sample_accuracy = tf.diag_part((equality_matrix * p_aba))
+    correct_round_trip_prob = tf.reduce_mean(
+      per_sample_accuracy, name=p_aba.name[:-2] + '_correct_round_trips')
+
+
+    per_sample_accuracy_t = tf.diag_part((equality_matrix * tf.transpose(p_aba)))
+    correct_round_trip_prob_t = tf.reduce_mean(
+      per_sample_accuracy_t, name=p_aba.name[:-2] + '_correct_round_trips_t')
+
     self.add_average(estimate_error)
     self.add_average(p_aba)
 
     tf.summary.scalar('Stats_EstError', estimate_error)
+    tf.summary.scalar('Stats_correct_round_trips', correct_round_trip_prob)
+    tf.summary.scalar('Stats_correct_round_trips_t', correct_round_trip_prob_t)
 
   def add_average(self, variable):
     """Add moving average variable to the model."""
@@ -385,7 +398,7 @@ class SemisupModel(object):
     tf.summary.scalar('Loss_Total_Avg', self.train_loss_average)
     tf.summary.scalar('Loss_Total', self.train_loss)
 
-    trainer = tf.train.AdamOptimizer(learning_rate)
+    trainer = tf.train.GradientDescentOptimizer(learning_rate)
 
     self.train_op = slim.learning.create_train_op(self.train_loss, trainer)
     return self.train_op
