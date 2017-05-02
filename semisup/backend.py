@@ -366,17 +366,11 @@ class SemisupModel(object):
     correct_round_trip_prob = tf.reduce_mean(
       per_sample_accuracy, name=p_aba.name[:-2] + '_correct_round_trips')
 
-
-    per_sample_accuracy_t = tf.diag_part((equality_matrix * tf.transpose(p_aba)))
-    correct_round_trip_prob_t = tf.reduce_mean(
-      per_sample_accuracy_t, name=p_aba.name[:-2] + '_correct_round_trips_t')
-
     self.add_average(estimate_error)
     self.add_average(p_aba)
 
     tf.summary.scalar('Stats_EstError', estimate_error)
     tf.summary.scalar('Stats_correct_round_trips', correct_round_trip_prob)
-    tf.summary.scalar('Stats_correct_round_trips_t', correct_round_trip_prob_t)
 
   def add_average(self, variable):
     """Add moving average variable to the model."""
