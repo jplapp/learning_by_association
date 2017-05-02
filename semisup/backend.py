@@ -112,7 +112,7 @@ class SemisupModel(object):
   """Helper class for setting up semi-supervised training."""
 
   def __init__(self, model_func, num_labels, input_shape, test_in=None,
-               treeStructure=None, maxDepth=99):
+               treeStructure=None, maxLogitDepth=99, maxWalkerDepth=99):
     """Initialize SemisupModel class.
 
     Creates an evaluation graph for the provided model_func.
@@ -133,7 +133,8 @@ class SemisupModel(object):
 
     self.test_batch_size = 100
     self.treeStructure = treeStructure
-    self.maxDepth = maxDepth
+    self.maxLogitDepth = maxLogitDepth
+    self.maxWalkerDepth = maxWalkerDepth
 
     self.model_func = model_func
 
@@ -186,7 +187,7 @@ class SemisupModel(object):
     # visit loss would be the same for all layers, so it's only added once here
     self.add_visit_loss(p_ab, visit_weight)
 
-    for d in range(min(self.maxDepth, self.treeStructure.depth)):
+    for d in range(min(self.maxWalkerDepth, self.treeStructure.depth)):
       labels_d = tf.slice(labels, [0, level_index_offset + d],[num_samples, 1])
       labels_d = tf.reshape(labels_d, [-1]) # necessary for next reshape
 
@@ -327,7 +328,7 @@ class SemisupModel(object):
     level_offsets = self.treeStructure.level_offsets
     level_sizes = self.treeStructure.level_sizes
 
-    for d in range(2):#min(self.maxDepth, self.treeStructure.depth)):
+    for d in range(min(self.maxLogitDepth, self.treeStructure.depth)):
 
       logits_subset = tf.slice(logits, [0, level_offsets[d]],
                                [num_samples, level_sizes[d+1]])

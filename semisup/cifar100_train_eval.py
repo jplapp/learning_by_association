@@ -46,14 +46,14 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_integer('sup_per_class', 500,
-                     'Number of labeled samples used per class.')
-
-flags.DEFINE_integer('unsup_per_class', 500,
-                     'Number of labeled samples used per class.')
-
-flags.DEFINE_integer('test_per_class', 20,
-                     'Number of labeled samples used per class.')
+# flags.DEFINE_integer('sup_per_class', 500,
+#                      'Number of labeled samples used per class.')
+#
+# flags.DEFINE_integer('unsup_per_class', 500,
+#                      'Number of labeled samples used per class.')
+#
+# flags.DEFINE_integer('test_per_class', 20,
+#                      'Number of labeled samples used per class.')
 
 flags.DEFINE_integer('sup_batch_size', 128,
                      'Number of labeled samples per batch.')
@@ -61,20 +61,25 @@ flags.DEFINE_integer('sup_batch_size', 128,
 flags.DEFINE_integer('unsup_batch_size', 128,
                      'Number of unlabeled samples per batch.')
 
-flags.DEFINE_integer('train_depth', 1,#logit is hardcoded to 2, walker depends on that here
-                     'Max depth of tree to train')
+flags.DEFINE_integer('train_logit_depth', 1,
+                     'Max depth of logits to use to train tree')
+
+flags.DEFINE_integer('train_walker_depth', 1,
+                     'Max depth of walker loss in the tree')
 
 flags.DEFINE_integer('eval_interval', 1000,
                      'Number of steps between evaluations.')
 
-flags.DEFINE_float('learning_rate',0.1, 'Initial learning rate.')
+flags.DEFINE_float('learning_rate',0.001, 'Initial learning rate.')
 
 flags.DEFINE_float('decay_factor', 0.1, 'Learning rate decay factor.')
 
-flags.DEFINE_float('decay_steps', 15000,
+flags.DEFINE_float('decay_steps', 20000,
                    'Learning rate decay interval in steps.')
 
-flags.DEFINE_float('visit_weight', 1., 'Weight for visit loss.')
+flags.DEFINE_float('visit_weight', 0.1, 'Weight for visit loss.')
+
+flags.DEFINE_float('walker_weight', 0.1, 'Weight for walker loss.')
 
 flags.DEFINE_float('gpu_fraction', 1.0, 'Fraction of GPU to use.')
 
@@ -89,6 +94,8 @@ IMAGE_SHAPE = cifar_tools.IMAGE_SHAPE
 
 
 def main(_):
+  train_depth = max(FLAGS.train_logit_depth, FLAGS.train_walker_depth)
+
   graph = tf.Graph()
   with graph.as_default():
 
@@ -122,8 +129,8 @@ def main(_):
       trainProviderUnsup = slim.dataset_data_provider.DatasetDataProvider(
         trainDatasetUnsup,
         num_readers=4,  # FLAGS.num_readers,
-        common_queue_capacity=10 * FLAGS.sup_batch_size,
-        common_queue_min=5 * FLAGS.sup_batch_size)
+        common_queue_capacity=10 * FLAGS.unsup_batch_size,
+        common_queue_min=5 * FLAGS.unsup_batch_size)
       [train_images_unsup, train_labels_unsup] = trainProviderUnsup.get(['image', 'label'])
 
       train_images_unsup = image_preprocessing_fn(train_images_unsup, train_image_size, train_image_size)
@@ -141,7 +148,9 @@ def main(_):
 
 
     model = semisup.SemisupModel(semisup.architectures.cifar_model, tree.num_labels,
-                                 IMAGE_SHAPE, treeStructure=tree, maxDepth=FLAGS.train_depth)
+                                 IMAGE_SHAPE, treeStructure=tree,
+                                 maxLogitDepth=FLAGS.train_logit_depth,
+                                 maxWalkerDepth=FLAGS.train_walker_depth)
 
     # Set up inputs.
     t_unsup_images, _ = semisup.create_input(train_images_unsup, train_labels_unsup,
@@ -156,7 +165,8 @@ def main(_):
 
     # Add losses.
     model.add_tree_semisup_loss(
-      t_sup_emb, t_unsup_emb, t_sup_labels, visit_weight=FLAGS.visit_weight)
+      t_sup_emb, t_unsup_emb, t_sup_labels,
+        walker_weight=FLAGS.walker_weight, visit_weight=FLAGS.visit_weight)
     model.add_tree_multitask_logit_loss(t_sup_logit, t_sup_labels, weight=1.)
 
     t_learning_rate = tf.train.exponential_decay(
@@ -168,8 +178,8 @@ def main(_):
     train_op = model.create_train_op(t_learning_rate)
     summary_op = tf.summary.merge_all()
 
-    train_scores = [[] for _ in range(FLAGS.train_depth)]
-    test_scores = [[] for _ in range(FLAGS.train_depth)]
+    train_scores = [[] for _ in range(train_depth)]
+    test_scores = [[] for _ in range(train_depth)]
 
     def evaluate_test_set(sess):
 
@@ -178,7 +188,7 @@ def main(_):
       nodeLabels = classify(model, ti, tree, sess)
       walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
                                      for label in tl])
-      for i in range(FLAGS.train_depth):
+      for i in range(train_depth):
         err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
                                    tree.level_sizes[i + 1], "train dimension " + str(i))
         train_scores[i] = train_scores[i] + [err]
@@ -189,7 +199,7 @@ def main(_):
       walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
                                      for label in tl])
 
-      for i in range(FLAGS.train_depth):
+      for i in range(train_depth):
         err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
                                    tree.level_sizes[i + 1], "test dimension " + str(i))
         test_scores[i] = test_scores[i] + [err]
@@ -230,7 +240,7 @@ def main(_):
       session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
       number_of_steps=FLAGS.max_steps,
       save_summaries_secs=300,
-      log_every_n_steps=500,
+      log_every_n_steps=100,
       #trace_every_n_steps=10,
       save_interval_secs=300)
 
@@ -254,10 +264,10 @@ def classify(model, images, tree, sess):
 
 def printConfusionMatrix(train_labels, test_pred, num_labels, name=""):
 
-  #conf_mtx = semisup.confusion_matrix(train_labels, test_pred, num_labels)
+  conf_mtx = semisup.confusion_matrix(train_labels, test_pred, num_labels)
   test_err = (train_labels != test_pred).mean() * 100
 
-  #print(conf_mtx)
+  print(conf_mtx)
   print(name + ' error: %.2f %%' % test_err)
   return test_err
 
