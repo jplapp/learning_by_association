@@ -61,6 +61,8 @@ flags.DEFINE_integer('sup_batch_size', 128,
 flags.DEFINE_integer('unsup_batch_size', 128,
                      'Number of unlabeled samples per batch.')
 
+flags.DEFINE_bool('unsup', False, 'Add unsupervised training samples')
+
 flags.DEFINE_integer('train_logit_depth', 1,
                      'Max depth of logits to use to train tree')
 
@@ -153,19 +155,21 @@ def main(_):
                                  maxWalkerDepth=FLAGS.train_walker_depth)
 
     # Set up inputs.
-    t_unsup_images, _ = semisup.create_input(train_images_unsup, train_labels_unsup,
-                                             batch_size=FLAGS.unsup_batch_size)
+    if FLAGS.unsup:
+      t_unsup_images, _ = semisup.create_input(train_images_unsup, train_labels_unsup,
+                                               batch_size=FLAGS.unsup_batch_size)
     t_sup_images, t_sup_labels = semisup.create_input(train_images_sup, train_labels_sup,
                                                       FLAGS.sup_batch_size)
 
     # Compute embeddings and logits.
     t_sup_emb = model.image_to_embedding(t_sup_images)
-    t_unsup_emb = model.image_to_embedding(t_unsup_images)
+    if FLAGS.unsup: t_unsup_emb = model.image_to_embedding(t_unsup_images)
     t_sup_logit = model.embedding_to_logit(t_sup_emb)
 
     # Add losses.
-    model.add_tree_semisup_loss(
-      t_sup_emb, t_unsup_emb, t_sup_labels,
+    if FLAGS.unsup:
+      model.add_tree_semisup_loss(
+        t_sup_emb, t_unsup_emb, t_sup_labels,
         walker_weight=FLAGS.walker_weight, visit_weight=FLAGS.visit_weight)
     model.add_tree_multitask_logit_loss(t_sup_logit, t_sup_labels, weight=1.)
 
