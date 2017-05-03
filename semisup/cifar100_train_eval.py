@@ -204,12 +204,7 @@ def main(_):
                                    tree.level_sizes[i + 1], "test dimension " + str(i))
         test_scores[i] = test_scores[i] + [err]
 
-        # test_summary = tf.Summary(
-        #   value=[tf.Summary.Value(
-        #       tag='Test Err', simple_value=test_err)])
-
-        # summary_writer.add_summary(summaries, step)
-        # summary_writer.add_summary(test_summary, step)
+        tf.summary.scalar('Test error level '+str(i), err)
 
         # saver.save(sess, FLAGS.logdir, model.step)
 

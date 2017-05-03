@@ -291,7 +291,7 @@ class SemisupModel(object):
     node_index = 0
 
     for node in nodes:
-      if node.depth >= self.maxDepth: continue
+      if node.depth >= self.maxLogitDepth: continue
 
       logits_subset = tf.slice(logits, [0, self.treeStructure.offsets[node_index]],
                                [num_samples, self.treeStructure.node_sizes[node_index]])
