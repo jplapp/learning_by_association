@@ -394,7 +394,8 @@ class SemisupModel(object):
     tf.summary.scalar('Loss_Total_Avg', self.train_loss_average)
     tf.summary.scalar('Loss_Total', self.train_loss)
 
-    trainer = tf.train.GradientDescentOptimizer(learning_rate)
+    #trainer = tf.train.GradientDescentOptimizer(learning_rate)
+    trainer = tf.train.AdamOptimizer(learning_rate)
 
     self.train_op = slim.learning.create_train_op(self.train_loss, trainer)
     return self.train_op
