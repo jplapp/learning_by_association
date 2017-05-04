@@ -179,7 +179,7 @@ class SemisupModel(object):
       visit_weight: Weight coefficient of the "visit" loss.
     """
     num_samples = int(labels.get_shape()[0])
-    level_index_offset = self.treeStructure.num_nodes
+    level_index_offset = 0#self.treeStructure.num_nodes
 
     match_ab = tf.matmul(a, b, transpose_b=True, name='match_ab')
     p_ab = tf.nn.softmax(match_ab, name='p_ab')
@@ -325,7 +325,7 @@ class SemisupModel(object):
     # which nodes should contribute to the loss for a sample
     # this is induced by the tree
     num_samples = int(logits.get_shape()[0])
-    level_index_offset = self.treeStructure.num_nodes
+    level_index_offset = 0#self.treeStructure.num_nodes
     level_offsets = self.treeStructure.level_offsets
     level_sizes = self.treeStructure.level_sizes
 

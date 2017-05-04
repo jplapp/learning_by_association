@@ -45,7 +45,7 @@ _NUM_TRAIN_FILES = 1
 
 _ADD_UNSUP = True
 #_ADD_UNSUP = False
-_DROP_FACTOR=2
+_DROP_FACTOR=5
 
 # The height and width of each image.
 _IMAGE_SIZE = 32
@@ -91,7 +91,8 @@ def _add_to_tfrecord(filename, tfrecord_writer, offset=0, drop_images=False, dro
         sys.stdout.flush()
 
         image = np.squeeze(images[j]).transpose((1, 2, 0))
-        label = tree.lookupMap[labels[j]-1].getLabels()
+        #label = tree.lookupMap[labels[j]-1].getLabels()
+        label = tree.lookupMap[labels[j]-1].walkerLabels
 
         png_string = sess.run(encoded_image,
                               feed_dict={image_placeholder: image})

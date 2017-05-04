@@ -39,7 +39,7 @@ from tensorflow.contrib import slim
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
 from tools.cifar100 import tree
-from tools.tree import findLabelsFromTree, getWalkerLabel, findLabelsFromTreeMultitask
+from tools.tree import getWalkerLabel, findLabelsFromTreeMultitask
 from tools import cifar100 as cifar_tools, dataset_factory, preprocessing_factory, cifar100, data_dirs
 
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -76,16 +76,16 @@ flags.DEFINE_float('learning_rate',0.001, 'Initial learning rate.')
 
 flags.DEFINE_float('decay_factor', 0.1, 'Learning rate decay factor.')
 
-flags.DEFINE_float('decay_steps', 20000,
+flags.DEFINE_float('decay_steps', 15000,
                    'Learning rate decay interval in steps.')
 
-flags.DEFINE_float('visit_weight', 0.1, 'Weight for visit loss.')
+flags.DEFINE_float('visit_weight', 0.2, 'Weight for visit loss.')
 
-flags.DEFINE_float('walker_weight', 0.1, 'Weight for walker loss.')
+flags.DEFINE_float('walker_weight', 0.5, 'Weight for walker loss.')
 
 flags.DEFINE_float('gpu_fraction', 1.0, 'Fraction of GPU to use.')
 
-flags.DEFINE_integer('max_steps', 100000, 'Number of training steps.')
+flags.DEFINE_integer('max_steps', 50000, 'Number of training steps.')
 
 flags.DEFINE_string('logdir','/data/logs', 'Training log path.')
 flags.DEFINE_bool('randomize_logdir', False, 'Whether to add a random string to the logdir to make it unique')
@@ -148,7 +148,6 @@ def main(_):
       [test_images, test_labels] = testProvider.get(['image', 'label'])
       test_images = image_preprocessing_fn(test_images, train_image_size, train_image_size)
 
-
     model = semisup.SemisupModel(semisup.architectures.cifar_model, tree.num_labels,
                                  IMAGE_SHAPE, treeStructure=tree,
                                  maxLogitDepth=FLAGS.train_logit_depth,
@@ -192,24 +191,20 @@ def main(_):
 
     def evaluate_test_set(sess, global_step):
 
-      ti, tl = model.materializeTensors([train_images_sup, train_labels_sup], 5000, sess)
+      ti, gtLabels = model.materializeTensors([train_images_sup, train_labels_sup], 5000, sess)
 
       nodeLabels = classify(model, ti, tree, sess)
-      walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
-                                     for label in tl])
       for i in range(train_depth):
-        err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+        err = printConfusionMatrix(gtLabels[:, i], nodeLabels[:, i],
                                    tree.level_sizes[i + 1], "train dimension " + str(i))
         train_scores[i] = train_scores[i] + [err]
 
       #todo make sure this gets all test images
-      ti, tl = model.materializeTensors([test_images, test_labels], 10000, sess)
+      ti, gtLabels = model.materializeTensors([test_images, test_labels], 10000, sess)
       nodeLabels = classify(model, ti, tree, sess)
-      walkerNodeLabels = np.asarray([getWalkerLabel(label, tree.depth, tree.num_nodes)
-                                     for label in tl])
 
       for i in range(train_depth):
-        err = printConfusionMatrix(walkerNodeLabels[:, i], nodeLabels[:, i],
+        err = printConfusionMatrix(gtLabels[:, i], nodeLabels[:, i],
                                    tree.level_sizes[i + 1], "test dimension " + str(i))
         test_scores[i] = test_scores[i] + [err]
 
@@ -223,9 +218,10 @@ def main(_):
     def train_step(session, train_op, global_step, *args, **kwargs):
       total_loss, should_stop = slim.learning.train_step(session, train_op, global_step, *args, **kwargs)
 
-      if (global_step+1) % FLAGS.eval_interval == 0 or global_step == 99:
-        print('Step: %d' % global_step)
-        evaluate_test_set(session, global_step)
+      step = session.run(global_step)
+      if (step+1) % FLAGS.eval_interval == 0 or step == 9:
+        print('Step: %d' % step)
+        evaluate_test_set(session, step)
 
       return total_loss, should_stop
 

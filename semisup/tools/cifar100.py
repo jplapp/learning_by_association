@@ -31,14 +31,24 @@ nodes = []
 #  nodes = nodes + [node]
 
 # simpler tree (merge every two)
-for i in range(10):
-  node = TreeNode("superclass " + str(i), leafs=range(i * 10, i * 10 + 10))
-  nodes = nodes + [node]
+#for i in range(10):
+#  node = TreeNode("superclass " + str(i), leafs=range(i * 10, i * 10 + 10))
+#  nodes = nodes + [node]
+
+# simpler tree (merge every 4)
+#for i in range(5):
+#  node = TreeNode("superclass " + str(i), leafs=range(i * 20, i * 20 + 10))
+#  nodes = nodes + [node]
+
+# tree from coarse labels
+#for i in range(20):
+#  node = TreeNode("superclass " + str(i), leafs=range(i * 5, i * 5 + 5))
+#  nodes = nodes + [node]
 
 # very simple tree
-#for i in range(2):
-##  node = TreeNode("superclass " + str(i), leafs=range(i * 50, i * 50 + 50))
-#  nodes = nodes + [node]
+for i in range(2):
+  node = TreeNode("superclass " + str(i), leafs=range(i * 50, i * 50 + 50))
+  nodes = nodes + [node]
 
 
 root = TreeNode("root", children=nodes)
