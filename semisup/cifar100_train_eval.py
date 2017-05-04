@@ -244,6 +244,7 @@ def main(_):
 
     print('train accuracies', train_scores)
     print('test accuracies', test_scores)
+    print('flags', FLAGS.__flags)
 
 
 def classify(model, images, tree, sess):
