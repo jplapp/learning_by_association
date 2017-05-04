@@ -186,6 +186,7 @@ class SemisupModel(object):
     p_ba = tf.nn.softmax(tf.transpose(match_ab), name='p_ba')
     # visit loss would be the same for all layers, so it's only added once here
     self.add_visit_loss(p_ab, visit_weight)
+    p_aba = tf.matmul(p_ab, p_ba, name='p_aba')
 
     #for d in range(1,2):
     for d in range(min(self.maxWalkerDepth, self.treeStructure.depth)):
@@ -197,8 +198,7 @@ class SemisupModel(object):
       p_target = (equality_matrix / tf.reduce_sum(
         equality_matrix, [1], keep_dims=True))
 
-      p_aba = tf.matmul(p_ab, p_ba, name='p_aba'+str(d))#todo move up again, only here because of walk statistics (otherwise same variable would be added to summary twice)
-      self.create_walk_statistics(p_aba, equality_matrix)
+      self.create_walk_statistics(p_aba, equality_matrix, depth=d)
 
       loss_aba = tf.losses.softmax_cross_entropy(
         p_target,
@@ -347,7 +347,7 @@ class SemisupModel(object):
       tf.summary.scalar('Loss_Logit_'+str(d), logit_loss)
       self.logit_losses = self.logit_losses + [logit_loss]
 
-  def create_walk_statistics(self, p_aba, equality_matrix):
+  def create_walk_statistics(self, p_aba, equality_matrix, depth=0):
     """Adds "walker" loss statistics to the graph.
 
     Args:
@@ -368,11 +368,12 @@ class SemisupModel(object):
     correct_round_trip_prob = tf.reduce_mean(
       per_sample_accuracy, name=p_aba.name[:-2] + '_correct_round_trips')
 
-    self.add_average(estimate_error)
-    self.add_average(p_aba)
+    if depth==0:
+      self.add_average(estimate_error)
+      self.add_average(p_aba)
 
-    tf.summary.scalar('Stats_EstError', estimate_error)
-    tf.summary.scalar('Stats_correct_round_trips', correct_round_trip_prob)
+    tf.summary.scalar('Stats_EstError'+str(depth), estimate_error)
+    tf.summary.scalar('Stats_correct_round_trips'+str(depth), correct_round_trip_prob)
 
   def add_average(self, variable):
     """Add moving average variable to the model."""
