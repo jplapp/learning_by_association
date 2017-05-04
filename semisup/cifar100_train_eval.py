@@ -173,6 +173,10 @@ def main(_):
         walker_weight=FLAGS.walker_weight, visit_weight=FLAGS.visit_weight)
     model.add_tree_multitask_logit_loss(t_sup_logit, t_sup_labels, weight=1.)
 
+    logdir = FLAGS.logdir
+    if FLAGS.randomize_logdir:
+      logdir = logdir + str(randint(0, 99999))
+
     t_learning_rate = tf.train.exponential_decay(
       FLAGS.learning_rate,
       model.step,
@@ -181,11 +185,12 @@ def main(_):
       staircase=True)
     train_op = model.create_train_op(t_learning_rate)
     summary_op = tf.summary.merge_all()
+    summary_writer = tf.summary.FileWriter(logdir, graph)
 
     train_scores = [[] for _ in range(train_depth)]
     test_scores = [[] for _ in range(train_depth)]
 
-    def evaluate_test_set(sess):
+    def evaluate_test_set(sess, global_step):
 
       ti, tl = model.materializeTensors([train_images_sup, train_labels_sup], 5000, sess)
 
@@ -208,29 +213,25 @@ def main(_):
                                    tree.level_sizes[i + 1], "test dimension " + str(i))
         test_scores[i] = test_scores[i] + [err]
 
-        tf.summary.scalar('Test error level '+str(i), err)
+        test_summary = tf.Summary(
+            value=[tf.Summary.Value(
+                tag='Test error level '+str(i), simple_value=err)])
 
-        # saver.save(sess, FLAGS.logdir, model.step)
+        summary_writer.add_summary(test_summary, global_step)
 
     # override function from slim.learning to include test set evaluation
-    def train_step(session, *args, **kwargs):
-      total_loss, should_stop = slim.learning.train_step(session, *args, **kwargs)
+    def train_step(session, train_op, global_step, *args, **kwargs):
+      total_loss, should_stop = slim.learning.train_step(session, train_op, global_step, *args, **kwargs)
 
-      if (train_step.step+1) % FLAGS.eval_interval == 0 or train_step.step == 99:
-        print('Step: %d' % train_step.step)
-        evaluate_test_set(session)
+      if (global_step+1) % FLAGS.eval_interval == 0 or global_step == 99:
+        print('Step: %d' % global_step)
+        evaluate_test_set(session, global_step)
 
-      train_step.step += 1
       return total_loss, should_stop
 
-    train_step.step = 0
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=FLAGS.gpu_fraction)
     
-    logdir = FLAGS.logdir
-    if FLAGS.randomize_logdir:
-      logdir = logdir + str(randint(0,99999))
-
     slim.learning.train(
       train_op,
       train_step_fn=train_step,
@@ -239,6 +240,7 @@ def main(_):
       session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
       number_of_steps=FLAGS.max_steps,
       save_summaries_secs=300,
+      summary_writer=summary_writer,
       log_every_n_steps=100,
       #trace_every_n_steps=10,
       save_interval_secs=300)
