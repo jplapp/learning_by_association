@@ -23,11 +23,23 @@ DATADIR = data_dirs.cifar100
 IMAGE_SHAPE = [32, 32, 3]
 
 
-
 nodes = []
-for i in range(20):
-  node = TreeNode("superclass " + str(i), leafs=range(i * 5, i * 5 + 5))
+
+# tree from coarse labels
+#for i in range(20):
+#  node = TreeNode("superclass " + str(i), leafs=range(i * 5, i * 5 + 5))
+#  nodes = nodes + [node]
+
+# simpler tree (merge every two)
+for i in range(10):
+  node = TreeNode("superclass " + str(i), leafs=range(i * 10, i * 10 + 10))
   nodes = nodes + [node]
+
+# very simple tree
+#for i in range(2):
+##  node = TreeNode("superclass " + str(i), leafs=range(i * 50, i * 50 + 50))
+#  nodes = nodes + [node]
+
 
 root = TreeNode("root", children=nodes)
 
