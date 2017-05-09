@@ -112,7 +112,8 @@ class SemisupModel(object):
   """Helper class for setting up semi-supervised training."""
 
   def __init__(self, model_func, num_labels, input_shape, test_in=None,
-               treeStructure=None, maxLogitDepth=99, maxWalkerDepth=99):
+               treeStructure=None, maxLogitDepth=99, maxWalkerDepth=99,
+               hierarchical_decay=False):
     """Initialize SemisupModel class.
 
     Creates an evaluation graph for the provided model_func.
@@ -135,6 +136,8 @@ class SemisupModel(object):
     self.treeStructure = treeStructure
     self.maxLogitDepth = maxLogitDepth
     self.maxWalkerDepth = maxWalkerDepth
+
+    self.hierarchical_decay = hierarchical_decay
 
     self.model_func = model_func
 
@@ -188,6 +191,7 @@ class SemisupModel(object):
     self.add_visit_loss(p_ab, visit_weight)
     p_aba = tf.matmul(p_ab, p_ba, name='p_aba')
 
+
     #for d in range(1,2):
     for d in range(min(self.maxWalkerDepth, self.treeStructure.depth)):
       labels_d = tf.slice(labels, [0, level_index_offset + d],[num_samples, 1])
@@ -200,10 +204,13 @@ class SemisupModel(object):
 
       self.create_walk_statistics(p_aba, equality_matrix, depth=d)
 
+      weight = walker_weight
+      if self.hierarchical_decay: weight = weight * np.exp(-d)
+
       loss_aba = tf.losses.softmax_cross_entropy(
         p_target,
         tf.log(1e-8 + p_aba),
-        weights=walker_weight,# * np.exp(-d/2),
+        weights=weight,
         scope='loss_aba'+str(d))
 
       tf.summary.scalar('Loss_aba'+str(d), loss_aba)
@@ -336,7 +343,8 @@ class SemisupModel(object):
                                [num_samples, level_sizes[d+1]])
       labels_subset = tf.slice(labels, [0, level_index_offset+d], [num_samples, 1]) # labels are not one-hot encoded
 
-      layer_weight = 1. #if node.depth == 0 else .4
+      layer_weight = 1.0
+      if self.hierarchical_decay: layer_weight = np.exp(-d)
 
       logit_loss = tf.losses.sparse_softmax_cross_entropy(
         labels_subset,

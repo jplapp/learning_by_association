@@ -94,6 +94,7 @@ flags.DEFINE_integer('run_id', 0, 'Id of training run. Will be added to logdir i
 
 flags.DEFINE_string('dataset_dir', data_dirs.cifar100, 'Dataset Location.')
 flags.DEFINE_bool('log_losses', False, 'Log losses during training')
+flags.DEFINE_bool('hierarchical_decay', False, 'Decrease weights for lower levels of the tree')
 
 IMAGE_SHAPE = cifar_tools.IMAGE_SHAPE
 
@@ -156,7 +157,8 @@ def main(_):
     model = semisup.SemisupModel(semisup.architectures.cifar_model, tree.num_labels,
                                  IMAGE_SHAPE, treeStructure=tree,
                                  maxLogitDepth=FLAGS.train_logit_depth,
-                                 maxWalkerDepth=FLAGS.train_walker_depth)
+                                 maxWalkerDepth=FLAGS.train_walker_depth,
+                                 hierarchical_decay=FLAGS.hiearchical_decay)
 
     # Set up inputs.
     if FLAGS.unsup:
