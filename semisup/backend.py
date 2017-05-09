@@ -359,21 +359,15 @@ class SemisupModel(object):
     """
     # Using the square root of the correct round trip probalilty as an estimate
     # of the current classifier accuracy.
-    per_row_accuracy = 1.0 - tf.reduce_sum((equality_matrix * p_aba), 1)**0.5
-    estimate_error = tf.reduce_mean(
-        1.0 - per_row_accuracy, name=p_aba.name[:-2] + '_esterr')
-
-    # for every sample, check how likely we can reach another sample from the same class
-    per_sample_accuracy = tf.diag_part((equality_matrix * p_aba))
-    correct_round_trip_prob = tf.reduce_mean(
-      per_sample_accuracy, name=p_aba.name[:-2] + '_correct_round_trips')
+    per_row_accuracy = tf.reduce_sum((equality_matrix * p_aba), 1)**0.5
+    average_accuracy = tf.reduce_mean(
+        per_row_accuracy, name=p_aba.name[:-2] + '_estaccuracy')
 
     if depth==0:
-      self.add_average(estimate_error)
+      self.add_average(average_accuracy)
       self.add_average(p_aba)
 
-    tf.summary.scalar('Stats_EstError'+str(depth), estimate_error)
-    tf.summary.scalar('Stats_correct_round_trips'+str(depth), correct_round_trip_prob)
+    tf.summary.scalar('Stats_EstAccuracy'+str(depth), average_accuracy)
 
   def add_average(self, variable):
     """Add moving average variable to the model."""

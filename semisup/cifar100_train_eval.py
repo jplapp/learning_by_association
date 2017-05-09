@@ -33,16 +33,17 @@ from __future__ import print_function
 import tensorflow as tf
 import semisup
 import numpy as np
-from random import randint
 from tensorflow.contrib import slim
 
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
 from tools.cifar100 import tree
-from tools.tree import getWalkerLabel, findLabelsFromTreeMultitask
+from tools.tree import findLabelsFromTreeMultitask
 from tools import cifar100 as cifar_tools, dataset_factory, preprocessing_factory, cifar100, data_dirs
 
 tf.logging.set_verbosity(tf.logging.INFO)
+
+np.set_printoptions(linewidth=400, threshold=99999)
 
 FLAGS = flags.FLAGS
 
@@ -58,25 +59,25 @@ FLAGS = flags.FLAGS
 flags.DEFINE_integer('sup_batch_size', 128,
                      'Number of labeled samples per batch.')
 
-flags.DEFINE_integer('unsup_batch_size', 128,
+flags.DEFINE_integer('unsup_batch_size', 256,
                      'Number of unlabeled samples per batch.')
 
 flags.DEFINE_bool('unsup', False, 'Add unsupervised training samples')
 
-flags.DEFINE_integer('train_logit_depth', 1,
+flags.DEFINE_integer('train_logit_depth', 2,
                      'Max depth of logits to use to train tree')
 
-flags.DEFINE_integer('train_walker_depth', 1,
+flags.DEFINE_integer('train_walker_depth', 2,
                      'Max depth of walker loss in the tree')
 
-flags.DEFINE_integer('eval_interval', 1000,
+flags.DEFINE_integer('eval_interval', 2000,
                      'Number of steps between evaluations.')
 
 flags.DEFINE_float('learning_rate',0.001, 'Initial learning rate.')
 
 flags.DEFINE_float('decay_factor', 0.1, 'Learning rate decay factor.')
 
-flags.DEFINE_float('decay_steps', 15000,
+flags.DEFINE_float('decay_steps', 20000,
                    'Learning rate decay interval in steps.')
 
 flags.DEFINE_float('visit_weight', 0.2, 'Weight for visit loss.')
@@ -88,7 +89,9 @@ flags.DEFINE_float('gpu_fraction', 1.0, 'Fraction of GPU to use.')
 flags.DEFINE_integer('max_steps', 50000, 'Number of training steps.')
 
 flags.DEFINE_string('logdir','/data/logs', 'Training log path.')
-flags.DEFINE_bool('randomize_logdir', False, 'Whether to add a random string to the logdir to make it unique')
+
+flags.DEFINE_integer('run_id', 0, 'Id of training run. Will be added to logdir if > 0')
+
 flags.DEFINE_string('dataset_dir', data_dirs.cifar100, 'Dataset Location.')
 flags.DEFINE_bool('log_losses', False, 'Log losses during training')
 
@@ -96,6 +99,8 @@ IMAGE_SHAPE = cifar_tools.IMAGE_SHAPE
 
 
 def main(_):
+  print('flags', FLAGS.__flags)
+
   train_depth = max(FLAGS.train_logit_depth, FLAGS.train_walker_depth)
 
   graph = tf.Graph()
@@ -173,8 +178,8 @@ def main(_):
     model.add_tree_multitask_logit_loss(t_sup_logit, t_sup_labels, weight=1.)
 
     logdir = FLAGS.logdir
-    if FLAGS.randomize_logdir:
-      logdir = logdir + str(randint(0, 99999))
+    if FLAGS.run_id > 0:
+      logdir = logdir + "_" + str(FLAGS.run_id)
 
     t_learning_rate = tf.train.exponential_decay(
       FLAGS.learning_rate,
@@ -233,7 +238,7 @@ def main(_):
       train_step_fn=train_step,
       logdir=logdir,
       summary_op=summary_op,
-      session_config=tf.ConfigProto(gpu_options=gpu_options),#device_count={'GPU': 0}
+      session_config=tf.ConfigProto(gpu_options=gpu_options),
       number_of_steps=FLAGS.max_steps,
       save_summaries_secs=300,
       summary_writer=summary_writer,
@@ -244,7 +249,6 @@ def main(_):
 
     print('train accuracies', train_scores)
     print('test accuracies', test_scores)
-    print('flags', FLAGS.__flags)
 
 
 def classify(model, images, tree, sess):
@@ -262,10 +266,10 @@ def classify(model, images, tree, sess):
 
 def printConfusionMatrix(train_labels, test_pred, num_labels, name=""):
 
-  conf_mtx = semisup.confusion_matrix(train_labels, test_pred, num_labels)
+  #conf_mtx = semisup.confusion_matrix(train_labels, test_pred, num_labels)
   test_err = (train_labels != test_pred).mean() * 100
 
-  print(conf_mtx)
+  #print(conf_mtx.astype(np.int8))
   print(name + ' error: %.2f %%' % test_err)
   return test_err
 
