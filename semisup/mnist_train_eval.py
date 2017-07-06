@@ -117,7 +117,7 @@ def main(_):
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
     for step in range(FLAGS.max_steps):
-      _, summaries, loss, loss_aba = sess.run([train_op, summary_op, model.cluster_loss, model.loss_aba])
+      _, summaries = sess.run([train_op, summary_op])
       if (step + 1) % FLAGS.eval_interval == 0 or step == 99:
         print('Step: %d' % step)
         test_pred = model.classify(test_images).argmax(-1)
